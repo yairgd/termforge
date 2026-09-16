@@ -41,6 +41,7 @@ theme:
 
 nav:
   - Home: README.md
+  - Demo application: DEMO.md
   - Architecture:
       - UI Architecture: UI_ARCHITECTURE.md
       - Window Management: WINDOW_MANAGEMENT.md

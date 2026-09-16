@@ -69,6 +69,10 @@ command. Click a pane to focus it, drag a separator to resize just the two
 adjacent panes, and use the wheel to scroll whatever is under the pointer.
 `:vs` and `:split` add panes; `:close`, `:only` and `:equal` rearrange them.
 
+[docs/DEMO.md](docs/DEMO.md) explains what the demo shows, how the panes,
+commands and floating window are wired, and which parts are framework
+behavior rather than application code.
+
 ## Documentation
 
 Full documentation: <https://yairgd.github.io/termforge/>

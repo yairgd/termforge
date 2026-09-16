@@ -19,13 +19,15 @@ interface.
 
 | If you want to | Read |
 |----------------|------|
+| See a working application end to end | [DEMO.md](DEMO.md) |
 | Understand widgets, focus, and the frame loop | [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) |
 | Lay out panes, splits, tabs, and chrome | [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) |
 | Know how cells, borders, and ANSI get painted | [RENDERING.md](RENDERING.md) |
 | Route keys, mouse, and interaction modes | [INPUT.md](INPUT.md) |
 | Add `:commands`, completion, and key chords | [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
 
-A runnable example application lives in [`cmd/demo`](https://github.com/yairgd/termforge/tree/main/cmd/demo).
+A runnable example application lives in [`cmd/demo`](https://github.com/yairgd/termforge/tree/main/cmd/demo);
+[DEMO.md](DEMO.md) walks through what it shows and how it is wired.
 
 ---
 
