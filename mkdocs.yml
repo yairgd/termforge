@@ -49,6 +49,7 @@ nav:
   - Input and commands:
       - Input: INPUT.md
       - Command System: COMMAND_SYSTEM.md
+  - gdbforge (debugger built on termforge): https://yairgd.github.io/gdbforge/
 
 markdown_extensions:
   - admonition
@@ -87,5 +88,10 @@ extra:
     image: https://yairgd.github.io/termforge/media/termforge-social.png
     image_alt: termforge terminal UI framework
     author: termforge contributors
+  related:
+    name: gdbforge
+    url: https://yairgd.github.io/gdbforge/
+    repo: https://github.com/yairgd/gdbforge
+    description: Vim-inspired terminal debugger for GDB and Delve — the application termforge was extracted from
 
 copyright: Copyright &copy; 2026 termforge contributors

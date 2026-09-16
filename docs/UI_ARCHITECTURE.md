@@ -8,6 +8,11 @@ This document covers the termforge presentation layer: the widget system, split-
 
 **Companion docs:** [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [RENDERING.md](RENDERING.md) · [INPUT.md](INPUT.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)
 
+For the same widget system carrying a real domain, see how
+[gdbforge](https://yairgd.github.io/gdbforge/) — the terminal debugger termforge was
+extracted from — arranges source, console, threads and breakpoints panes in its
+[UI architecture document](https://yairgd.github.io/gdbforge/UI_ARCHITECTURE/).
+
 ---
 
 ## Table of contents

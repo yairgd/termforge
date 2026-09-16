@@ -48,8 +48,20 @@ sibling package, and `scripts/check_imports.sh` enforces that.
 
 ---
 
-## Related
+## Related project: gdbforge
 
-termforge was extracted from [gdbforge](https://github.com/yairgd/gdbforge), which
-remains its first and largest consumer. Debugger-specific documentation — GDB and
-Delve integration, breakpoints, MI parsing, Lua workflows — lives in that repository.
+termforge was extracted from **[gdbforge](https://yairgd.github.io/gdbforge/)**, a
+Vim-inspired multi-pane terminal debugger for GDB and Delve, which remains its first and
+largest consumer. The two documentation sites are companions: everything about the
+framework itself — widgets, split tree, input modes, the command DSL — is documented here,
+while everything debugger-specific — GDB MI parsing, the Delve backend, breakpoints, PTY
+handling for the inferior, Lua target workflows for embedded and kernel debugging — is
+documented in the [gdbforge documentation](https://yairgd.github.io/gdbforge/).
+
+| Question | Site |
+|----------|------|
+| How do widgets, splits, or `:commands` work? | This site — [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md), [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md), [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
+| What does a real, large termforge application look like? | [gdbforge documentation](https://yairgd.github.io/gdbforge/) — [architecture](https://yairgd.github.io/gdbforge/ARCHITECTURE/), [UI architecture](https://yairgd.github.io/gdbforge/UI_ARCHITECTURE/) |
+| How is a debugger wired onto this framework? | [gdbforge debugger integration](https://yairgd.github.io/gdbforge/DEBUGGER_INTEGRATION/) |
+
+Source: [github.com/yairgd/gdbforge](https://github.com/yairgd/gdbforge).

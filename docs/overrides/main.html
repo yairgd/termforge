@@ -37,6 +37,17 @@
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "Linux",
         "codeRepository": {{ config.repo_url | tojson }}
+        {%- if config.extra.related %},
+        "isRelatedTo": {
+          "@type": "SoftwareApplication",
+          "name": {{ config.extra.related.name | tojson }},
+          "description": {{ config.extra.related.description | tojson }},
+          "url": {{ config.extra.related.url | tojson }},
+          "applicationCategory": "DeveloperApplication",
+          "operatingSystem": "Linux",
+          "codeRepository": {{ config.extra.related.repo | tojson }}
+        }
+        {%- endif %}
       }
     </script>
   {% else %}

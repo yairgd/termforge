@@ -134,12 +134,20 @@ go build ./... && go vet ./... && go test ./... && ./scripts/check_imports.sh
 ./docs/setup-docs-venv.sh && ./docs/serve.sh
 ```
 
-## Origin
+## Origin, and the related project: gdbforge
 
-termforge was extracted from [gdbforge](https://github.com/yairgd/gdbforge), a
-Vim-inspired terminal debugger for GDB and Delve, which remains its first and largest
-consumer. Anything debugger-specific — GDB/Delve backends, breakpoints, MI parsing, Lua
-target workflows — stayed in that repository.
+termforge was extracted from **[gdbforge](https://github.com/yairgd/gdbforge)**, a
+Vim-inspired multi-pane terminal debugger for GDB and Delve, which remains its first and
+largest consumer. Anything debugger-specific — GDB/Delve backends, breakpoints, MI parsing,
+inferior PTY handling, Lua target workflows for embedded and kernel debugging — stayed in
+that repository.
+
+The two projects have companion documentation sites:
+
+| Looking for | Go to |
+|-------------|-------|
+| Building a terminal app on this framework | **[termforge docs](https://yairgd.github.io/termforge/)** |
+| A large real application built on it, and debugging with GDB/Delve | **[gdbforge docs](https://yairgd.github.io/gdbforge/)** — [architecture](https://yairgd.github.io/gdbforge/ARCHITECTURE/), [debugger integration](https://yairgd.github.io/gdbforge/DEBUGGER_INTEGRATION/) |
 
 ## License
 
