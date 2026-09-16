@@ -1,0 +1,19 @@
+flowchart TB
+    subgraph AppWidgets["application widgets"]
+        N1["text pane · Viewport"]
+        N3["list pane · TableWidget"]
+        N5["process pane · CompositeTerminal + WireTTY"]
+        N8["REPL pane · ConsolePane + InputLine"]
+    end
+
+    subgraph Termforge["termforge"]
+        VP["Viewport · lines over platform.Buffer"]
+        TW["TableWidget · columns, selection, search"]
+        CT["CompositeTerminal · xterm + WireTTY"]
+        CP["ConsolePane · REPL scrollback + InputLine"]
+    end
+
+    N1 --> VP
+    N3 --> TW
+    N5 --> CT
+    N8 --> CP

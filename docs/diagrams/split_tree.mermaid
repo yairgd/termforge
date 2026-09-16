@@ -1,0 +1,13 @@
+graph TB
+    WS["Workspace"]
+    VS["VerticalSplit"]
+    MAIN["Main pane"]
+    HS["HorizontalSplit"]
+    LIST["List pane"]
+    CON["Console"]
+
+    WS --> VS
+    VS --> MAIN
+    VS --> HS
+    HS --> LIST
+    HS --> CON

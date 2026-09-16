@@ -1,0 +1,106 @@
+# go-task runner: https://taskfile.dev
+# Install: go install github.com/go-task/task/v3/cmd/task@latest
+# Ensure $(go env GOPATH)/bin is on PATH (e.g. ~/go/bin).
+version: '3'
+
+vars:
+  BIN_DIR: bin
+  # termforge serves docs on 8775/8776; gdbforge uses 8765/8766 so both can run
+  # at once. Override per-invocation: task docs DOCS_PORT=9000
+  DOCS_PORT: '{{.DOCS_PORT | default "8775"}}'
+  DOCS_PREVIEW_PORT: '{{.DOCS_PREVIEW_PORT | default "8776"}}'
+
+tasks:
+  default:
+    desc: Build the library and the demo (default task)
+    cmds:
+      - task: build
+
+  build:
+    desc: Build all packages and the demo binary into bin/
+    cmds:
+      - go build ./...
+      - mkdir -p {{.BIN_DIR}}
+      - go build -o {{.BIN_DIR}}/demo ./cmd/demo
+
+  run:
+    desc: Run the demo application
+    cmds:
+      - go run ./cmd/demo
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Vet Go code
+    cmds:
+      - go vet ./...
+
+  check-imports:
+    desc: Fail on framework→app, library→demo, or platform→engine imports
+    cmds:
+      - ./scripts/check_imports.sh
+
+  check:
+    desc: Run everything CI runs (build, vet, test, import guardrails, gofmt)
+    cmds:
+      - go build ./...
+      - go vet ./...
+      - go test ./...
+      - ./scripts/check_imports.sh
+      - |
+        unformatted=$(gofmt -l .)
+        if [ -n "$unformatted" ]; then
+          echo "These files are not gofmt'd:"
+          echo "$unformatted"
+          exit 1
+        fi
+        echo "gofmt clean"
+
+  clean:
+    desc: Remove build artifacts and the generated docs site
+    cmds:
+      - rm -rf {{.BIN_DIR}} _site
+
+  docs:
+    desc: Serve the MkDocs site locally (default http://127.0.0.1:8775)
+    cmds:
+      - MKDOCS_DEV_ADDR=127.0.0.1:{{.DOCS_PORT}} ./docs/serve.sh
+
+  docs:setup:
+    desc: Create or refresh the local MkDocs virtualenv (.venv-docs/)
+    cmds:
+      - ./docs/setup-docs-venv.sh
+
+  docs:export:
+    desc: Build the static MkDocs site into _site/
+    cmds:
+      - ./docs/setup-docs-venv.sh
+      - .venv-docs/bin/python -m mkdocs build --clean
+
+  docs:preview:
+    desc: Preview the production MkDocs build locally (default http://127.0.0.1:8776)
+    cmds:
+      - ./docs/setup-docs-venv.sh
+      - .venv-docs/bin/python -m mkdocs serve --dev-addr 127.0.0.1:{{.DOCS_PREVIEW_PORT}} --clean
+
+  docs:check:
+    desc: Build the docs and fail on broken internal links or missing anchors
+    cmds:
+      - ./docs/setup-docs-venv.sh
+      - |
+        out=$(.venv-docs/bin/python -m mkdocs build --clean 2>&1)
+        echo "$out"
+        if echo "$out" | grep -qE 'contains a link|WARNING|ERROR'; then
+          echo
+          echo "docs:check failed — fix the links/anchors reported above"
+          exit 1
+        fi
+        echo "docs OK"

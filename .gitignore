@@ -1,0 +1,18 @@
+# editor / scratch
+*.swo
+*.swn
+*.swp
+tags
+junk
+*.junk
+
+# build artifacts
+*.o
+*.so
+*.a
+bin
+/demo
+
+# docs
+.venv-docs/
+_site/
