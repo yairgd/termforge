@@ -62,6 +62,28 @@ The shape is deliberately nested rather than a single row of panes:
 Horizontal( Vertical( main, Horizontal(table, side) ), log )
 ```
 
+Hexagons are split nodes (the separators); rectangles are leaf panes.
+
+```mermaid
+graph TB
+    S1{{"SPLIT (horizontal)<br/>ratio 0.70<br/>workspace over log"}}
+    S2{{"SPLIT (vertical)<br/>ratio 0.62<br/>main beside the right column"}}
+    S3{{"SPLIT (horizontal)<br/>ratio 0.5<br/>table over side"}}
+    L1["LEAF: main"]
+    L2["LEAF: table"]
+    L3["LEAF: side"]
+    L4["LEAF: log"]
+    S1 -->|First / top| S2
+    S1 -->|Second / bottom| L4
+    S2 -->|First / left| L1
+    S2 -->|Second / right| S3
+    S3 -->|First / top| L2
+    S3 -->|Second / bottom| L3
+```
+
+Three split nodes, so three separators on screen, and the innermost one spans only the
+right column: a split node divides the rectangle it was given, not the whole screen.
+
 That gives drag-resize something real to act on — dragging the inner `table`/`side` bar
 must not move the outer `main`/`log` one. `demo.BuildDefault` splits evenly first and
 sets the ratios once the shape is final: `0.70` for the workspace band over the log,
