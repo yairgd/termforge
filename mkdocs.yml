@@ -49,6 +49,7 @@ nav:
   - Input and commands:
       - Input: INPUT.md
       - Command System: COMMAND_SYSTEM.md
+  - Changelog: CHANGELOG.md
   - gdbforge (debugger built on termforge): https://yairgd.github.io/gdbforge/
 
 markdown_extensions:

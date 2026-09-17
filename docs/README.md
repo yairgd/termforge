@@ -25,6 +25,7 @@ interface.
 | Know how cells, borders, and ANSI get painted | [RENDERING.md](RENDERING.md) |
 | Route keys, mouse, and interaction modes | [INPUT.md](INPUT.md) |
 | Add `:commands`, completion, and key chords | [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) |
+| See what changed in a release | [CHANGELOG.md](CHANGELOG.md) |
 
 A runnable example application lives in [`cmd/demo`](https://github.com/yairgd/termforge/tree/main/cmd/demo);
 [DEMO.md](DEMO.md) walks through what it shows and how it is wired.
