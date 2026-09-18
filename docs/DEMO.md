@@ -127,7 +127,7 @@ however many panes are open.
 
 | Pointer | Action |
 |---------|--------|
-| Click a pane | Focus it (`SplitLayout.FocusAt`) |
+| Click a pane | Focus it (`WidgetTree.FocusAt`) |
 | Drag a separator | Resize the two adjacent panes only |
 | Wheel | Scroll the pane under the pointer, focused or not |
 | Drag inside a pane | Select text; middle-click pastes (PRIMARY) |
@@ -136,7 +136,7 @@ however many panes are open.
 
 The demo's own mouse code decides only *which surface* gets the event. Focus, drag,
 scroll, selection, and the status-label copy are all framework behavior reached through
-`SplitLayout.FocusAt` and `TabWidget.HandleEvent`.
+`WidgetTree.FocusAt` and `TabWidget.HandleEvent`.
 
 ---
 
@@ -218,7 +218,7 @@ composition and would join the window frame into the pane separators underneath.
 it is visible it takes the keyboard and the pointer, and a click outside closes it and
 falls through to the pane below.
 
-**Deleting the last pane is the caller's policy.** `SplitLayout.DeleteFocus` reports
+**Deleting the last pane is the caller's policy.** `WidgetTree.DeleteFocus` reports
 `true` when it declined, which `:close` turns into a logged warning and `:quit` turns
 into exiting the app.
 

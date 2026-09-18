@@ -15,7 +15,7 @@ type DemoApp struct {
 	insertKeys  *commands.KeyBindingRegistry
 
 	tab       *termforge.TabWidget
-	layout    *termforge.SplitLayout
+	layout    *termforge.WidgetTree
 	cmdWidget *termforge.CmdWidget
 	ctx       platform.AppContext
 

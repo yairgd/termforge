@@ -14,7 +14,7 @@ func TestParentSplitLocatesNewSplitNode(t *testing.T) {
 	right := demo.NewScrollPane("right")
 	extra := demo.NewScrollPane("extra")
 
-	tree := termforge.NewSplitLayout(main)
+	tree := termforge.NewWidgetTree(main)
 	tree.SetEqualAlways(false)
 	tree.Split(termforge.Vertical, right) // root = Vertical(main, right)
 	tree.FocusWidget(right)
@@ -42,7 +42,7 @@ func TestSplitInheritsLeafRatioUntilEvened(t *testing.T) {
 	a := demo.NewScrollPane("a")
 	b := demo.NewScrollPane("b")
 
-	tree := termforge.NewSplitLayout(a)
+	tree := termforge.NewWidgetTree(a)
 	tree.SetEqualAlways(false)
 	tree.Root().Ratio = 1
 	tree.Split(termforge.Vertical, b)
@@ -64,7 +64,7 @@ func TestSplitInheritsLeafRatioUntilEvened(t *testing.T) {
 func TestParentSplitRejectsMissingNodes(t *testing.T) {
 	main := demo.NewScrollPane("main")
 	other := demo.NewScrollPane("other")
-	tree := termforge.NewSplitLayout(main)
+	tree := termforge.NewWidgetTree(main)
 	tree.Split(termforge.Vertical, other)
 
 	if parentSplit(nil, tree.FocusedLeaf()) != nil {

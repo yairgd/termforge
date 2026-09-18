@@ -14,13 +14,20 @@ const (
 	Vertical                   // Split left/right (side by side)
 )
 
+// NodeWidget is what a leaf of the split tree holds: a widget that also paints
+// its own status row. Embedding BaseWidget is enough to satisfy it.
+type NodeWidget interface {
+	Widget
+	StatusLineDrawer
+}
+
 // Node is structural tree state only. Per-frame paint/hit geometry lives in
 // WidgetTree.geom; tree algorithms live in layout_tree.go.
 type Node struct {
 	Type NodeType // Defines whether this is a Leaf or Split node
 
 	// --- Leaf node fields ---
-	Widget Widget // The UI component stored in this node (only valid if Type == Leaf)
+	Widget NodeWidget // The UI component stored in this node (only valid if Type == Leaf)
 
 	// --- Split node fields ---
 	Dir   SplitDir // Direction of the split (Horizontal or Vertical)
@@ -34,7 +41,7 @@ type Node struct {
 
 // SetWidget replaces the widget on a leaf node in O(1). Layout/geometry are unchanged.
 // No-op if n is nil or not a leaf.
-func (n *Node) SetWidget(w Widget) {
+func (n *Node) SetWidget(w NodeWidget) {
 	if n == nil || n.Type != NodeLeaf {
 		return
 	}
@@ -42,7 +49,7 @@ func (n *Node) SetWidget(w Widget) {
 }
 
 // GetWidget returns the widget on this node (may be nil).
-func (n *Node) GetWidget() Widget {
+func (n *Node) GetWidget() NodeWidget {
 	if n == nil {
 		return nil
 	}

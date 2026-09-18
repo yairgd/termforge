@@ -622,5 +622,3 @@ func (m *CmdWidget) Draw(c Canvas) {
 	}
 	m.Cursor().Paint(c, paintX, 0, under)
 }
-
-func (m *CmdWidget) DrawStatusLine(c Canvas, active bool) {}

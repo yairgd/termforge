@@ -11,9 +11,8 @@ import (
 
 type paintCountWidget struct{ draws atomic.Int64 }
 
-func (w *paintCountWidget) HandleEvent(tcell.Event)     {}
-func (w *paintCountWidget) Draw(Canvas)                 { w.draws.Add(1) }
-func (w *paintCountWidget) DrawStatusLine(Canvas, bool) {}
+func (w *paintCountWidget) HandleEvent(tcell.Event) {}
+func (w *paintCountWidget) Draw(Canvas)             { w.draws.Add(1) }
 
 type paintTestAPI struct{ app *App }
 

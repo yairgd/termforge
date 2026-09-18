@@ -295,7 +295,7 @@ What happens:
 
 `NewTabTwoHozSplitWins` builds a tree with an initial horizontal split of two widgets. Applications define **named layouts** — builder functions that assemble a whole tree — and apply them with a command such as `:layout <name>`:
 
-A builder returns a `*SplitLayout`; the application mounts it with `TabWidget.SetLayout` and then re-applies any startup wiring (status clipboard, resize hook, `equalalways`, leaf marks) that a freshly built tree does not carry.
+A builder returns a `*WidgetTree`; the application mounts it with `TabWidget.SetLayout` and then re-applies any startup wiring (status clipboard, resize hook, `equalalways`, leaf marks) that a freshly built tree does not carry.
 
 Register layout names through `AppState.RegisterLayout` so completion and `:layout` validation see them. Per-layout key policy is application state, not something `Tab` tracks.
 
@@ -307,15 +307,17 @@ A `Tab` hosts any **`termforge.Layout`** — the split tree today, and any futur
 
 ```go
 type Layout interface {
-    Widget // HandleEvent, Draw, DrawStatusLine
+    Widget // HandleEvent, Draw
     BuildLayout(c Canvas)
 }
 ```
 
-Two consumers reach the same `SplitLayout`, by two deliberately separate routes:
+A `Layout` draws no status line of its own — in the tiling tree each pane paints its own status row — which is why `Widget` carries only `HandleEvent` and `Draw`, and `DrawStatusLine` lives on the separate `NodeWidget` interface that leaves implement.
 
-- **Rendering and lifecycle — the top path.** `App → TabWidget → Tab → Layout interface → SplitLayout`. Everything on this path is generic: `TabWidget` and `Tab` see only the interface methods above, so neither can acquire a dependency on split-tree behaviour and a tab can host a completely different `Layout` with no changes.
-- **Application logic — the left path.** Code that genuinely needs split-specific operations (focus navigation, pane placement, splitting, leaf marks) takes the concrete `*SplitLayout` from the application's own accessor. Those operations are intentionally absent from the interface.
+Two consumers reach the same `WidgetTree`, by two deliberately separate routes:
+
+- **Rendering and lifecycle — the top path.** `App → TabWidget → Tab → Layout interface → WidgetTree`. Everything on this path is generic: `TabWidget` and `Tab` see only the interface methods above, so neither can acquire a dependency on split-tree behaviour and a tab can host a completely different `Layout` with no changes.
+- **Application logic — the left path.** Code that genuinely needs split-specific operations (focus navigation, pane placement, splitting, leaf marks) takes the concrete `*WidgetTree` from the application's own accessor. Those operations are intentionally absent from the interface.
 
 Splitting the routes this way is what let the 28 forwarding methods `Tab` used to carry disappear: application code no longer hops through the container to reach the tree, while `Tab` stays small enough to host a future layout that has no panes at all. The application's accessor is the single place the interface is narrowed to a concrete type.
 
@@ -325,7 +327,6 @@ flowchart TD
     TabW["TabWidget"]
     Tab["Tab<br/>Title + Content Layout"]
     Iface(["Layout interface<br/>Widget + BuildLayout"])
-    SL["SplitLayout<br/>embeds *WidgetTree"]
     WT["WidgetTree<br/>topology, geometry, focus, marks"]
     FutureA["future layout"]
     FutureB["future layout"]
@@ -335,33 +336,33 @@ flowchart TD
     App -->|"calls Draw"| TabW
     TabW -->|"active tab"| Tab
     Tab -->|"Content field"| Iface
-    Iface -.->|"implemented by"| SL
+    Iface -.->|"implemented by"| WT
     Iface -.->|"implemented by"| FutureA
     Iface -.->|"implemented by"| FutureB
-    SL -->|"embeds"| WT
     AppCode -->|"calls"| Shell
-    Shell -->|"returns concrete type"| SL
+    Shell -->|"returns concrete type"| WT
 ```
 
-Solid arrows are runtime use (a call, a field, an embed); dotted arrows are the `implements` relationship. Every box is a Go type except the double-barred one, whose shape marks it as a set of scattered call sites — `lay := a.Layout()` appears in about a dozen files such as `workspace_policy.go`, `workspace_place.go` and `actions.go`.
+Solid arrows are runtime use (a call, a field); dotted arrows are the `implements` relationship. Every box is a Go type except the double-barred one, whose shape marks it as a set of scattered call sites — `lay := a.Layout()` appears in about a dozen files such as `workspace_policy.go`, `workspace_place.go` and `actions.go`.
 
 *Source: [`diagrams/tab_layout.mermaid`](diagrams/tab_layout.mermaid)*
 
-`SplitLayout` is the tiling implementation. It **embeds `*WidgetTree`**, so every pane, focus and mark operation is reachable on the layout with no forwarding code:
+**`WidgetTree` is the tiling implementation** and is handed to the tab as its content directly. There is no wrapper type between the interface and the tree, so every pane, focus and mark operation is reachable on the layout with no forwarding code:
 
 ```go
-type SplitLayout struct {
-    *WidgetTree
-}
+lay := app.Layout() // *termforge.WidgetTree
+lay.FocusLeft()
+lay.Split(termforge.Vertical, pane)
+lay.SetLeafMark("code", leaf)
 ```
 
 **Do not add `Tab` or `TabWidget` methods that forward into a `Layout`.** Code needing arrangement-specific behaviour takes the layout and drives it directly. The accessor returns nil when the tab hosts a non-split layout, which is the signal that mark and slot APIs do not apply.
 
-A layout can also sit **inside a leaf** (`Layout` embeds `Widget`, and `Node.Widget` is a `Widget`), giving two independent trees in one tab. `WidgetTree.buildLayout` hands a nested layout its canvas. Focus arbitration between two trees is separate policy and is not implemented.
+A layout can also sit **inside a leaf**, giving two independent trees in one tab — it must implement `StatusLineDrawer` as well, since a leaf holds a `NodeWidget`. `WidgetTree.buildLayout` hands a nested layout its canvas. Focus arbitration between two trees is separate policy and is not implemented.
 
 ## Tab management
 
-**Tab** is chrome: a title plus a `Layout`. For a `SplitLayout`, focus and named leaf marks live on the embedded **`WidgetTree`**. Mark **names** and focus policy are **application-private**; termforge stays free of application roles so unrelated apps can reuse it.
+**Tab** is chrome: a title plus a `Layout`. For the tiling layout, focus and named leaf marks live on the **`WidgetTree`** itself. Mark **names** and focus policy are **application-private**; termforge stays free of application roles so unrelated apps can reuse it.
 
 ```mermaid
 flowchart LR
@@ -389,13 +390,13 @@ type TabWidget struct {
 }
 ```
 
-Its whole surface is `Layout()`, `SetLayout()`, `Draw`, `HandleEvent`, `DrawStatusLine` and the two constructors.
+Its whole surface is `Layout()`, `SetLayout()`, `Draw`, `HandleEvent` and the two constructors.
 
 | Feature | Status |
 |---------|--------|
 | Single tab container | Implemented |
 | Hand events/draw to active tab's Layout | Implemented |
-| Named leaf marks on WidgetTree | Implemented (on `SplitLayout`) |
+| Named leaf marks on WidgetTree | Implemented |
 | Generic non-tree tab content | Implemented (`Layout` interface); no second implementation yet |
 | Nested layout inside a leaf | Structurally supported; focus arbitration not implemented |
 | Tab header rendering | Not implemented |
@@ -454,7 +455,7 @@ Each leaf pane in the split tree has a one-row **status band** at local `y = c.H
 3. Redraw split separators (`redrawGrid`) — restores border glyphs and default style
 4. Paint status on **every** leaf (`DrawStatusLine`) — focused bar vs inactive name overlay (no dash fill)
 
-Widgets set a display name via `BaseWidget.PaneName` (e.g. `"Code"`, `"Log"`) or override `DrawStatusLine`. Container widgets (`TabWidget`, `CmdWidget`) use a no-op. Prefer `StatusLabel()` when the copyable text differs from `PaneName` (Code uses the full source path).
+Panes set a display name via `BaseWidget.PaneName` (e.g. `"Code"`, `"Log"`) or override `DrawStatusLine`. Chrome that never occupies a pane (`TabWidget`, `CmdWidget`, `CompletionBarWidget`) implements no status method at all — it is a plain `Widget`, not a `NodeWidget`. Prefer `StatusLabel()` when the copyable text differs from `PaneName` (Code uses the full source path).
 
 **Mouse on the status band** (row at `Bottom()` of the leaf, outside content):
 

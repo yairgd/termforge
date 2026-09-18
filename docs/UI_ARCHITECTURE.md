@@ -55,15 +55,34 @@ Reusable widgets (`LoggerWidget`, **`TableWidget`**, `TextWidget`) depend on **g
 
 A widget is created only when the user asks to display a model (for example via `:buffer code` or `:split`). Multiple widgets may display the same model simultaneously. Closing a pane destroys the widget, not the model.
 
-Every on-screen pane implements the `Widget` interface:
+Everything drawable implements the `Widget` interface:
 
 ```go
 type Widget interface {
     HandleEvent(ev tcell.Event)
     Draw(c Canvas)
-    DrawStatusLine(c Canvas, active bool)
 }
 ```
+
+A pane in the split tree additionally paints its own status row, which is a
+separate interface so that chrome and containers — a `Layout`, an overlay, a
+`CmdWidget` — are `Widget`s without carrying a status method they never use:
+
+```go
+type StatusLineDrawer interface {
+    DrawStatusLine(c Canvas, active bool)
+}
+
+// NodeWidget is what a leaf of the split tree holds.
+type NodeWidget interface {
+    Widget
+    StatusLineDrawer
+}
+```
+
+`Node.Widget`, `NewWidgetTree`, `WidgetTree.Split` and `ReplaceFocusedWidget` all
+take a `NodeWidget`, so a pane that forgot its status row is a compile error
+rather than a blank band at the bottom of the pane.
 
 ```mermaid
 classDiagram
@@ -73,6 +92,10 @@ classDiagram
         <<interface>>
         +HandleEvent(ev)
         +Draw(c Canvas)
+    }
+
+    class NodeWidget {
+        <<interface>>
         +DrawStatusLine(c, active)
     }
 
@@ -104,14 +127,15 @@ classDiagram
         +active int
     }
 
-    Widget <|.. TableWidget
-    Widget <|.. CompositeTerminal
+    Widget <|-- NodeWidget
+    NodeWidget <|.. TableWidget
+    NodeWidget <|.. CompositeTerminal
     Widget <|.. CmdWidget
     Widget <|.. TabWidget
     BaseWidget <|-- TableWidget
 ```
 
-**`BaseWidget`** (`base_widget.go`) provides shared helpers for app panes: event channels, `PaneName`, and a default `DrawStatusLine` that paints a styled bar (`▎ {name}`) when `active` is true. Widgets embed `BaseWidget` and set `PaneName` in their constructor, or override `DrawStatusLine` for custom behavior. Container widgets (`TabWidget`, `CmdWidget`) implement a no-op `DrawStatusLine`.
+**`BaseWidget`** (`base_widget.go`) provides shared helpers for app panes: event channels, `PaneName`, and a default `DrawStatusLine` that paints a styled bar (`▎ {name}`) when `active` is true. Embedding it is what makes a widget a `NodeWidget`; set `PaneName` in the constructor, or override `DrawStatusLine` for custom behavior. Chrome that never occupies a pane (`TabWidget`, `CmdWidget`) needs no status method at all.
 
 **Terminal building blocks:**
 

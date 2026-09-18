@@ -4,9 +4,16 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+// Widget is anything the app can draw and hand events to: a pane, a layout,
+// or chrome such as the command line.
 type Widget interface {
 	HandleEvent(ev tcell.Event)
 	Draw(c Canvas)
+}
+
+// StatusLineDrawer paints the one-row status band the layout reserves below a
+// pane. Chrome that never occupies a pane does not implement it.
+type StatusLineDrawer interface {
 	DrawStatusLine(c Canvas, active bool)
 }
 

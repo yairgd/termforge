@@ -186,7 +186,7 @@ type stubWidget struct {
 	BaseWidget
 }
 
-func NewStubWidget(name string) Widget {
+func NewStubWidget(name string) NodeWidget {
 	return &stubWidget{BaseWidget: BaseWidget{PaneName: name}}
 }
 

@@ -20,6 +20,12 @@ type layoutGeom struct {
 	sepRect    Rect   // separator hit target (screen coords)
 }
 
+// WidgetTree is the tiling Layout: panes separated by draggable splits, with
+// Vim-style focus navigation and named leaf marks.
+//
+// It is handed to a Tab as its content directly — there is no wrapper type, so
+// every tree operation stays reachable on the layout with no forwarding code
+// (tree.FocusLeft(), tree.SetLeafMark(...), tree.Split(...)).
 type WidgetTree struct {
 	root  *Node
 	focus *Node
@@ -87,7 +93,7 @@ func (w *WidgetTree) SetInsertActive(active bool) {
 }
 
 // FocusedWidget returns the leaf widget that currently has focus.
-func (w *WidgetTree) FocusedWidget() Widget {
+func (w *WidgetTree) FocusedWidget() NodeWidget {
 	leaf := w.FocusedLeaf()
 	if leaf == nil {
 		return nil
@@ -224,7 +230,7 @@ func (w *WidgetTree) TopLeftLeaf() *Node {
 // ReplaceFocusedWidget swaps the widget on the focused leaf in O(1).
 // Tree structure and geometry are unchanged. Returns false if there is no leaf
 // or widget is nil.
-func (w *WidgetTree) ReplaceFocusedWidget(widget Widget) bool {
+func (w *WidgetTree) ReplaceFocusedWidget(widget NodeWidget) bool {
 	if widget == nil {
 		return false
 	}
@@ -239,7 +245,7 @@ func (w *WidgetTree) ReplaceFocusedWidget(widget Widget) bool {
 // ReplaceMatchingLeafWidget sets widget on the first non-focused leaf for which
 // match returns true. Used to update a matching pane without stealing focus from
 // the currently focused leaf. Returns false if no matching leaf is found.
-func (w *WidgetTree) ReplaceMatchingLeafWidget(widget Widget, match func(Widget) bool) bool {
+func (w *WidgetTree) ReplaceMatchingLeafWidget(widget NodeWidget, match func(Widget) bool) bool {
 	if widget == nil || match == nil {
 		return false
 	}
@@ -257,7 +263,7 @@ func (w *WidgetTree) ReplaceMatchingLeafWidget(widget Widget, match func(Widget)
 	return false
 }
 
-func NewWidgetTree(newWidget Widget) *WidgetTree {
+func NewWidgetTree(newWidget NodeWidget) *WidgetTree {
 	node := &Node{Type: NodeLeaf, Widget: newWidget, Ratio: 1, parent: nil}
 
 	return &WidgetTree{
@@ -289,7 +295,7 @@ func (w *WidgetTree) extentAlong(n *Node, dir SplitDir) int {
 	return r.H()
 }
 
-func (w *WidgetTree) Split(dir SplitDir, newWidget Widget) {
+func (w *WidgetTree) Split(dir SplitDir, newWidget NodeWidget) {
 
 	node := w.focus
 

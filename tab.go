@@ -58,8 +58,8 @@ func NewTabWidget(title string, content Layout) *TabWidget {
 }
 
 // NewTabTwoHozSplitWins creates a tab with a horizontal split: top over bottom.
-func NewTabTwoHozSplitWins(title string, top Widget, bottom Widget) *TabWidget {
-	lay := NewSplitLayout(top)
+func NewTabTwoHozSplitWins(title string, top NodeWidget, bottom NodeWidget) *TabWidget {
+	lay := NewWidgetTree(top)
 	lay.Split(Horizontal, bottom)
 	return NewTabWidget(title, lay)
 }
@@ -106,5 +106,3 @@ func (t *TabWidget) Draw(c Canvas) {
 	l.BuildLayout(c)
 	l.Draw(c)
 }
-
-func (t *TabWidget) DrawStatusLine(c Canvas, active bool) {}

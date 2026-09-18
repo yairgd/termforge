@@ -108,9 +108,6 @@ func (o *HelpOverlay) drawFrame(c termforge.Canvas, style tcell.Style) {
 	c.SetContent(w-1, h-1, overlayBottomRight, style)
 }
 
-// DrawStatusLine is a no-op: a floating window has no pane status bar.
-func (o *HelpOverlay) DrawStatusLine(c termforge.Canvas, active bool) {}
-
 func (o *HelpOverlay) HandleEvent(ev tcell.Event) {
 	if !o.Visible() || o.doc == nil {
 		return

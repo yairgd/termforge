@@ -7,10 +7,10 @@ import "github.com/yairgd/termforge"
 
 // Panes are the four stub views in the default demo layout.
 type Panes struct {
-	Main  termforge.Widget // primary text pane
-	Table termforge.Widget // columnar list pane
-	Side  termforge.Widget // status / notes
-	Log   termforge.Widget // scrollable log
+	Main  termforge.NodeWidget // primary text pane
+	Table termforge.NodeWidget // columnar list pane
+	Side  termforge.NodeWidget // status / notes
+	Log   termforge.NodeWidget // scrollable log
 }
 
 // BuildDefault nests splits in both directions so the demo shows a real tree
@@ -27,8 +27,8 @@ type Panes struct {
 // The resulting tree is Horizontal(Vertical(main, Horizontal(table, side)), log),
 // which gives separator drag-resize something interesting to act on: dragging
 // the inner table/side bar must not move the outer main/log one.
-func BuildDefault(p Panes) *termforge.SplitLayout {
-	tree := termforge.NewSplitLayout(p.Main)
+func BuildDefault(p Panes) *termforge.WidgetTree {
+	tree := termforge.NewWidgetTree(p.Main)
 
 	// Split evenly first, then set ratios once the shape is final.
 	tree.SetEqualAlways(true)

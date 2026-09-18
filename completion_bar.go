@@ -60,8 +60,6 @@ func (w *CompletionBarWidget) HandleEvent(ev tcell.Event) {
 	// Navigation is owned by CompletionMenu + ModeCompletion keys.
 }
 
-func (w *CompletionBarWidget) DrawStatusLine(c Canvas, active bool) {}
-
 func nameWidth(name string) int {
 	return len([]rune(name))
 }

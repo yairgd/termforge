@@ -104,7 +104,7 @@ func (a *DemoApp) newWidgetTable() *termforge.TableWidget {
 	t.AddRow("CompletionBar", "chrome", "wildmenu completions")
 	t.AddRow("LoggerWidget", "log", "leveled log pane")
 	t.AddRow("TabWidget", "frame", "holds the active Layout")
-	t.AddRow("SplitLayout", "frame", "the split tree itself")
+	t.AddRow("WidgetTree", "frame", "the split tree itself")
 
 	w.InitSelectionKeyBindings()
 	w.SetClipboard(a.ClipboardIO())
