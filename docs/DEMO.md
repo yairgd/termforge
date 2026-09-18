@@ -163,21 +163,22 @@ imports them.
 
 ## How it is wired
 
-`Init` registers four top-level widgets, and the `App` draws them in registration order
+`Init` registers the top-level widgets, and the `App` draws them in registration order
 into one grid:
 
 ```go
-a.AddWidget(a.tab)                                          // workspace: tabs + split tree
-a.AddRowWidget(termforge.NewCompletionBarWidget(a.ctx), 1)  // wildmenu
-a.AddRowWidget(a.cmdWidget, 1)                              // ':' command line
-a.AddFloatingWidget(a.help, helpRect)                       // floating window, painted last
+a.AddWidget(a.tab)                     // workspace: tabs + split tree, fills the screen
+a.SetCmdline(a.cmdWidget)              // paste target in command mode
+a.layout.PinBottom(a.cmdWidget, 1)     // ':' command line — a pinned leaf, not a band
+a.AddFloatingWidget(a.help, helpRect)  // floating window, painted last
 ```
 
-How a widget is registered is also how it is placed: the two rows take one line each at
-the bottom, the workspace fills what is left (`H-2`), and the help overlay owns no layout
-space at all — `helpRect` positions it per frame. Order is the whole trick behind the
-floating window: added last, it paints over the workspace. Nothing recomputes rects on
-resize; the App's `WidgetsList` rebuilds them from the new canvas.
+How a widget is registered is also how it is placed. The workspace fills the screen; the
+cmdline is a 1-row leaf pinned to the bottom of the split tree, so the line above it is
+that split's own separator. The help overlay owns no layout space at all — `helpRect`
+positions it per frame. Order is the whole trick behind the floating window: added last,
+it paints over the workspace. Nothing recomputes rects on resize; the App's `WidgetsList`
+rebuilds them from the new canvas.
 
 `helpRect` caps the window at 78×24, keeps a margin of panes visible around it so it
 reads as floating, and returns the zero `Rect` when the terminal is too small to frame a

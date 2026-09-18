@@ -5,17 +5,19 @@ import (
 	"github.com/yairgd/termforge/platform"
 )
 
-// CompletionView paints a CompletionMenu snapshot. CompletionBarWidget is the
-// default chrome row; a list window could implement the same interface later.
+// CompletionView paints a CompletionMenu snapshot. Two implementations ship:
+// CompletionPopupWidget, a floating window that costs no layout space, and
+// CompletionBarWidget for hosts that would rather spend a chrome row.
 type CompletionView interface {
 	SetItems(names []string, selected int)
 	Clear()
 	Active() bool
 }
 
-// CompletionBarWidget is chrome (not a WidgetTree leaf): one row above the
-// command line. It only paints items + selection from CompletionMenu via
-// SetItems — no selection ownership.
+// CompletionBarWidget is chrome (not a WidgetTree leaf): one full-width row,
+// registered with AddRowWidget, or floating on a row of the host's choosing —
+// gdbforge overlays the separator above the cmdline. It only paints items +
+// selection from CompletionMenu via SetItems — no selection ownership.
 type CompletionBarWidget struct {
 	BaseWidget
 	names    []string

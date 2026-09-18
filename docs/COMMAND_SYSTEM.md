@@ -52,7 +52,7 @@ flowchart TB
     subgraph ui ["UI layer"]
         CmdW["CmdWidget"]
         Bus["platform.EventBus"]
-        Bar["CompletionBarWidget"]
+        Bar["CompletionView"]
         CmdW --> Parser
         CmdW -->|"Publish CompletionMsg"| Bus
         Bus -->|"Subscribe"| Bar
@@ -284,7 +284,7 @@ sequenceDiagram
     participant Parser as CommandParser
     participant App as Application
     participant Bus as platform.EventBus
-    participant Bar as CompletionBarWidget
+    participant Bar as CompletionView
     participant Tree as CommandNode tree
 
     User->>CmdW: Tab
@@ -312,7 +312,8 @@ a.cmdWidget.Ctx = a.ctx   // provides EventBus for CompletionMsg
 a.cmdWidget.SetOnExecute(func() {
     _ = a.cmdWidget.ExecuteParsed()
 })
-a.completionBar = termforge.NewCompletionBarWidget(a.ctx)
+a.completionPopup = termforge.NewCompletionPopupWidget(a.ctx)
+a.AddFloatingWidget(a.completionPopup, popupRect)
 ```
 
 On **Enter**, the widget calls `Parse`; if `CanExecute()`, it invokes **`onExecute`** (app controller). Leaf actions run on the `CommandNode` — no `CommandID` / `SubmitMsg` indirection for tree commands.
@@ -334,12 +335,12 @@ type CompletionMsg struct {
 | Role | Where | Behavior |
 |------|-------|----------|
 | Publisher | `CmdWidget` (Tab) | `platform.Publish(ctx.Bus, CompletionMsg{…})` |
-| Subscriber | `CompletionBarWidget` | Wildmenu row above `:` (white-on-black); multi-match → `ModeCompletion` |
+| Subscriber | A `CompletionView` | `CompletionPopupWidget` (floating window) or `CompletionBarWidget` (chrome row); multi-match → `ModeCompletion` |
 | Keys | `ModeCompletion` | Left/Right/Up/Down cycle; Esc → `ModeCommand`; Enter applies token |
 
-Single unique match still auto-inserts in `ModeCommand` (no mode switch). The bar is `App` chrome (draw after `TabWidget`), not a `WidgetTree` leaf.
+Single unique match still auto-inserts in `ModeCommand` (no mode switch). Either view is `App` chrome (drawn after `TabWidget`), not a `WidgetTree` leaf.
 
-**Architecture note:** wildmenu is not a popup layer. It is the same chrome pattern as `CmdWidget` — `AddRowWidget` + mode-routed keys + draw-only-when-active. Future one-line overlays should follow that pattern; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#extending-chrome-no-popup-layer).
+**Architecture note:** the wildmenu is not a popup *layer*. Whichever view is attached, it is an ordinary widget — `AddFloatingWidget` or `AddRowWidget`, mode-routed keys, draw-only-when-active — and registration order is the whole z-order. See [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md#extending-chrome-no-popup-layer).
 
 Producers depend only on the bus + message type. Consumers register independently (avoids constructor injection and cyclic wiring).
 
@@ -388,7 +389,7 @@ A key binding can invoke the same handler as a colon command (`OnFocusLeft`) wit
 
 ### Tab completion feedback
 
-1. `CompletionBarWidget` subscribes to `termforge.CompletionMsg` (wildmenu above the cmdline).
+1. A `CompletionView` subscribes to `termforge.CompletionMsg` (the floating `CompletionPopupWidget`, or `CompletionBarWidget` for a chrome row).
 
 ---
 

@@ -25,6 +25,9 @@ type App struct {
 	widgets WidgetsList
 	screen  tcell.Screen
 	exit    bool
+	// cmdline owns paste in command mode wherever it is placed — a chrome row
+	// here or a leaf pinned into the workspace tree.
+	cmdline Widget
 	// widgets draw here all the time
 	// last frame that was actually displayed
 	frontBuffer *Grid
@@ -81,6 +84,11 @@ func (app *App) AddRowWidget(w Widget, rows int) { app.widgets.AddRowWidget(w, r
 func (app *App) AddFloatingWidget(w Widget, rect func(Canvas) Rect) {
 	app.widgets.AddFloatingWidget(w, rect)
 }
+
+// SetCmdline names the widget that receives clipboard events in command mode.
+// Required when the cmdline is not registered as chrome — a leaf pinned into
+// the workspace tree is not reachable by walking the chrome list.
+func (app *App) SetCmdline(w Widget) { app.cmdline = w }
 
 // WidgetRect returns the screen rect the layout gave w, or the zero Rect when w
 // is not registered. Used by mouse routing to find the surface under a click.
@@ -505,11 +513,9 @@ func (a *App) HandleEvent(ev tcell.Event) {
 		// Command/completion mode: only the cmdline should receive paste
 		// (GDB may still be the focused tab leaf).
 		if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
-			a.widgets.ForEach(func(w Widget) {
-				if _, ok := w.(*CmdWidget); ok {
-					w.HandleEvent(e)
-				}
-			})
+			if a.cmdline != nil {
+				a.cmdline.HandleEvent(e)
+			}
 			return
 		}
 		a.widgets.HandleEvent(ev)

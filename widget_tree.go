@@ -315,6 +315,48 @@ func (w *WidgetTree) Split(dir SplitDir, newWidget NodeWidget) {
 	}
 }
 
+// PinBottom puts widget in a rows-high leaf below the whole tree, so the line
+// between them is this split's own separator instead of a border the layout
+// draws by hand. The pinned leaf is chrome, not a pane: CollectLeaves hides it,
+// so focus moves, :close, :only and separator drags never reach it.
+//
+// Re-pinning replaces a previous bottom chrome leaf, which is what a :layout
+// switch does after mounting a freshly built tree.
+func (w *WidgetTree) PinBottom(widget NodeWidget, rows int) {
+	if w == nil || widget == nil || rows < 1 {
+		return
+	}
+	if w.pinnedBottom() != nil {
+		w.root.Second.Widget = widget
+		w.root.FixedSecond = rows
+		return
+	}
+	inner := w.root
+	w.root = &Node{Type: NodeSplit, Dir: Horizontal, Ratio: 1, FixedSecond: rows}
+	w.root.First = inner
+	w.root.Second = &Node{Type: NodeLeaf, Widget: widget, Ratio: 1, parent: w.root}
+	inner.parent = w.root
+}
+
+// pinnedBottom returns the bottom chrome leaf, or nil when nothing is pinned.
+func (w *WidgetTree) pinnedBottom() *Node {
+	if w == nil || w.root == nil || w.root.Type != NodeSplit || w.root.FixedSecond <= 0 {
+		return nil
+	}
+	return w.root.Second
+}
+
+// PinnedBottomRect is the screen rect of the pinned chrome leaf, or the zero
+// Rect when nothing is pinned. Hosts hit-test with it (the widget has no rect
+// in the App chrome list anymore), and a zero Rect contains no point.
+func (w *WidgetTree) PinnedBottomRect() Rect {
+	n := w.pinnedBottom()
+	if n == nil {
+		return Rect{}
+	}
+	return w.leafRect(n)
+}
+
 func (l *WidgetTree) HandleEvent(ev tcell.Event) {
 	if me, ok := ev.(*tcell.EventMouse); ok {
 		if l.handleMouse(me) {
@@ -498,6 +540,11 @@ func (l *WidgetTree) findSeparator(x, y int) *Node {
 	var found *Node
 	WalkSplits(l.root, func(n *Node) {
 		if found != nil {
+			return
+		}
+		// A pinned chrome split has a fixed height, so its separator is not a
+		// drag handle — the row below it must stay exactly one row.
+		if n.FixedSecond > 0 {
 			return
 		}
 		if !l.geom[n].sepRect.Contains(x, y) {
@@ -786,6 +833,20 @@ func (t *WidgetTree) OnlyFocus() bool {
 	if leaf.parent == nil && t.root == leaf {
 		return true // already alone
 	}
+	// Pinned chrome is not one of the panes :only collapses, so the focused
+	// pane replaces the workspace subtree and the cmdline keeps its row.
+	if pin := t.pinnedBottom(); pin != nil {
+		if t.root.First == leaf {
+			return true // already alone above the chrome
+		}
+		leaf.parent = t.root
+		t.root.First = leaf
+		t.focus = leaf
+		if t.equalAlways {
+			ComputeRatios(t.root)
+		}
+		return true
+	}
 	leaf.parent = nil
 	t.root = leaf
 	t.focus = leaf
@@ -827,7 +888,6 @@ func (l *WidgetTree) Draw(c Canvas) {
 		}
 	})
 	l.redrawGrid(l.root, c)
-	c.DrawHorizontalLocal(c.H(), 0, c.W()+1, false)
 
 	WalkLeaves(l.root, func(n *Node) {
 		if visible(n) {
@@ -888,6 +948,19 @@ func verticalSplitRects(node *Node, c Canvas) (leftW, rightW int, r1, r2 Rect) {
 
 func horizontalSplitRects(node *Node, c Canvas) (topH, bottomH int, r1, r2 Rect) {
 	avail := c.H() - 1
+	// Pinned chrome is not a pane: it keeps its exact height and the rest goes
+	// to First, so minPaneCells (which a 1-row cmdline could never satisfy)
+	// does not apply to it.
+	if node.FixedSecond > 0 {
+		topH = avail - node.FixedSecond
+		if topH < 1 {
+			return 0, 0, c.Rect(), c.Rect()
+		}
+		bottomH = c.H() - topH - 1
+		r1 = c.ChildRect(0, 0, c.W(), topH)
+		r2 = c.ChildRect(0, topH+1, c.W(), bottomH)
+		return topH, bottomH, r1, r2
+	}
 	if avail < 2*minPaneCells {
 		return 0, 0, c.Rect(), c.Rect()
 	}
@@ -979,7 +1052,13 @@ func (l *WidgetTree) buildLayout(node *Node, c Canvas) {
 	case Horizontal:
 		topH, bottomH, r1, r2 := horizontalSplitRects(node, c)
 		avail := c.H() - 1
-		if avail < 2*minPaneCells || topH < minPaneCells || bottomH < minPaneCells {
+		tooSmall := avail < 2*minPaneCells || topH < minPaneCells || bottomH < minPaneCells
+		if node.FixedSecond > 0 {
+			// The pinned child is deliberately smaller than a pane; only a
+			// canvas with no room left for First collapses the split.
+			tooSmall = topH < 1
+		}
+		if tooSmall {
 			l.buildLayout(l.collapseChild(node), c)
 			return
 		}

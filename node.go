@@ -33,6 +33,13 @@ type Node struct {
 	Dir   SplitDir // Direction of the split (Horizontal or Vertical)
 	Ratio float64  // Portion of space given to the First child (range: 0.0–1.0)
 
+	// FixedSecond pins the Second child to this many cells and ignores Ratio.
+	// It exists for permanent full-width chrome at an edge of the workspace —
+	// the cmdline, so the line above it is this split's own separator. A
+	// transient window (wildmenu, help) belongs in the App's floating tier,
+	// which costs no layout space; do not give it a node here.
+	FixedSecond int
+
 	First  *Node // First child node (top or left depending on Dir)
 	Second *Node // Second child node (bottom or right depending on Dir)
 

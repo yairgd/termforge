@@ -48,17 +48,16 @@ func (a *DemoApp) Init() error {
 	// later :vs / :split. ':equal' equalizes on demand instead.
 	a.State().SetEqualAlways(false)
 	a.layout.SetEqualAlways(false)
-	// Chrome banding, top to bottom: workspace fills what the two rows below it
-	// leave over, the completion bar overlays the row above the cmdline.
+	// The workspace fills the screen; the cmdline is a pinned 1-row leaf at the
+	// bottom of the tree, so the line above it is that split's own separator.
 	a.AddWidget(a.tab)
-
-	a.AddRowWidget(termforge.NewCompletionBarWidget(a.ctx), 1)
 
 	a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
 	a.cmdWidget.SetClipboard(a.ClipboardIO())
-	a.AddRowWidget(a.cmdWidget, 1)
+	a.SetCmdline(a.cmdWidget)
+	a.layout.PinBottom(a.cmdWidget, 1)
 
 	// Added last so it paints over the workspace: the App draws widgets in
 	// registration order into one grid.
@@ -103,7 +102,8 @@ func (a *DemoApp) newWidgetTable() *termforge.TableWidget {
 	t.AddRow("CompositeTerminal", "pty", "xterm emulation, WireTTY")
 	t.AddRow("ConsolePane", "repl", "scrollback + InputLine")
 	t.AddRow("CmdWidget", "chrome", "':' command line")
-	t.AddRow("CompletionBar", "chrome", "wildmenu completions")
+	t.AddRow("CompletionBar", "chrome", "wildmenu row")
+	t.AddRow("CompletionPopup", "overlay", "wildmenu window")
 	t.AddRow("LoggerWidget", "log", "leveled log pane")
 	t.AddRow("TabWidget", "frame", "holds the active Layout")
 	t.AddRow("WidgetTree", "frame", "the split tree itself")

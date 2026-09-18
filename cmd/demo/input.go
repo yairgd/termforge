@@ -33,7 +33,7 @@ func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {
 		}
 	}
 
-	inCmd := a.WidgetRect(a.cmdWidget).Contains(x, y)
+	inCmd := a.cmdLineRect().Contains(x, y)
 
 	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
 		if middle && a.cmdWidget != nil {
@@ -71,11 +71,21 @@ func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {
 	a.RequestFrame()
 }
 
+// cmdLineRect is the cmdline's screen rect. It comes from the layout, not the
+// App chrome list, because the cmdline is a leaf pinned to the bottom of the
+// workspace tree. The zero Rect contains no point, so hit tests fail closed.
+func (a *DemoApp) cmdLineRect() termforge.Rect {
+	if a.layout == nil {
+		return termforge.Rect{}
+	}
+	return a.layout.PinnedBottomRect()
+}
+
 func (a *DemoApp) clickCmdLine(screenX int) {
 	if a.cmdWidget == nil {
 		return
 	}
-	a.cmdWidget.SetCursorAtLocalX(screenX - a.WidgetRect(a.cmdWidget).X())
+	a.cmdWidget.SetCursorAtLocalX(screenX - a.cmdLineRect().X())
 	a.RequestFrame()
 }
 

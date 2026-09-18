@@ -28,13 +28,15 @@ termforge organizes panes through a **Workspace** containing a recursive **split
 
 ## Top-level layout
 
-The root UI is **not** a split tree. It is a fixed vertical stack:
+The root UI is a workspace that fills the screen, with the command line pinned
+to its bottom edge inside the split tree:
 
 ```text
 Root
 ├── TabBar      (fixed height)
-├── Workspace   (remaining area — contains split tree)
-└── CmdLine     (fixed height)
+└── Workspace   (split tree)
+    ├── panes   (ratio sized)
+    └── CmdLine (pinned leaf, exactly 1 row)
 ```
 
 ```text
@@ -53,52 +55,62 @@ Root
 graph TB
     Root["Root"]
     TabBar["TabBar<br/>(fixed height)"]
-    Workspace["Workspace<br/>(remaining area)"]
-    CmdLine["CmdLine<br/>(fixed height)"]
+    Workspace["Workspace<br/>(split tree, fills the screen)"]
+    Panes["panes<br/>(ratio sized)"]
+    CmdLine["CmdLine<br/>(pinned leaf, 1 row)"]
 
     Root --> TabBar
     Root --> Workspace
-    Root --> CmdLine
+    Workspace --> Panes
+    Workspace --> CmdLine
 ```
 
 *Source: [`diagrams/top_level_ui.mermaid`](diagrams/top_level_ui.mermaid)*
 
-**Design decision:** keeping TabBar and CmdLine **outside** the split tree means:
+**Design decision:** the command line is a **pinned leaf** at the bottom of the tree (`WidgetTree.PinBottom(cmdWidget, 1)`), not a chrome band:
 
-- Tabs always remain visible regardless of pane layout.
-- The command line is a stable anchor (like Vim's `:` line).
-- Workspace resize math is isolated — only the middle band changes height on terminal resize.
-- Optional chrome overlays (wildmenu, future search/message bars) share the same App layer — **no popup compositor**.
+- The line above it is that split's own separator, so no layout draws a border outside its own rect.
+- It is still a stable anchor: `FixedSecond` holds it to exactly one row at the bottom edge, whatever the pane ratios do, and `CollectLeaves` hides it so focus movement, `:close`, `:only` and separator drags behave as if it were not in the tree.
+- Transient chrome (wildmenu, help, future message bars) is **not** in the tree. It goes in the App's floating tier, which reserves no space — **no popup compositor**.
 
-**App chrome** is a `WidgetsList` — the flat `Layout` at App level, the counterpart of `WidgetTree` inside the workspace. Apps declare the banding once at setup time and never compute rects on resize:
+**App chrome** is a `WidgetsList` — the flat `Layout` at App level, the counterpart of `WidgetTree` inside the workspace. Apps declare the placement once at setup time and never compute rects on resize:
 
 ```go
 a.AddWidget(a.tab)                                   // TabWidget: fills what the rows leave
-a.AddRowWidget(completionBar, 1)                     // CompletionBarWidget (overlay row)
-a.AddRowWidget(a.cmdWidget, 1)                       // CmdWidget (: line)
-a.AddFloatingWidget(a.help, helpRect)                // rect recomputed per frame
+a.SetCmdline(a.cmdWidget)                            // paste target in command mode
+a.layout.PinBottom(a.cmdWidget, 1)                   // CmdWidget (: line), bottom of the tree
+a.AddFloatingWidget(a.completionPopup, popupRect)    // rect recomputed per frame
+a.AddFloatingWidget(a.help, helpRect)
 ```
 
-`WidgetsList.BuildLayout` stacks the rows top to bottom in registration order and gives the fill widget everything left over, so the example above yields the same bands as before: workspace `H-2`, bar at row `H-2`, cmdline at row `H-1`. `TabWidget.Draw` uses its full assigned rect. `App.Draw` paints in registration order, so the completion bar can overwrite row `H-2` after the tab. The bar’s `Draw` is a no-op unless wildmenu is active — otherwise the pane status line stays visible.
+`WidgetsList.BuildLayout` stacks any rows top to bottom in registration order and gives the fill widget everything left over; floating widgets are placed by their callback and contribute nothing to the row math. `TabWidget.Draw` uses its full assigned rect, so the workspace now spans `H` rows with the cmdline on `H-1` and its separator on `H-2`. `App.Draw` paints in registration order, so anything floating registered after the tab covers it.
 
-Geometry is rebuilt on every frame and on every `UpdateCanvas`, so a resize needs no application hook at all — `AppApi` has none. `App.WidgetRect(w)` returns the rect a widget was given, for mouse routing.
+Geometry is rebuilt on every frame and on every `UpdateCanvas`, so a resize needs no application hook at all — `AppApi` has none. `App.WidgetRect(w)` returns the rect a widget was given, for mouse routing; the cmdline is the exception, since it lives in the tree — use `WidgetTree.PinnedBottomRect()`.
 
 ### Extending chrome (no popup layer)
 
-Reuse the same pattern for future overlays (search bar, confirm strip, message line):
+Three placements, and the choice is about lifetime, not looks:
 
-1. Register a chrome widget at App level (same event/draw layer as tab + cmdline).
-2. Pick its placement there: `AddRowWidget` for a band, `AddFloatingWidget` for a window.
-3. Own keys with a `platform.Mode` (like `ModeCompletion`) or forward when `Active()`.
-4. `Draw` only when needed so idle overlays do not cover status lines.
+| Chrome | Placement | Example |
+|--------|-----------|---------|
+| Transient window | `AddFloatingWidget` at App level | wildmenu (`CompletionPopupWidget`), help overlay |
+| Permanent full-width edge | pinned tree leaf via `PinBottom` | the `:` command line |
+| Permanent band outside the workspace | `AddRowWidget` | a future tab bar |
 
-Do **not** introduce a separate popup/z-order system for one-line chrome.
+For an overlay:
+
+1. Register it with `AddFloatingWidget`, last, so it paints over the workspace.
+2. Gate on your own visibility flag in **both** `Draw` and `HandleEvent` — `WidgetsList.HandleEvent` broadcasts to every registered widget.
+3. Own keys with a `platform.Mode` (like `ModeCompletion`), not with tree position.
+4. Paint the frame with `SetContent`, never `DrawHorizontalLocal` / `DrawVerticalLocal`: those run border composition and would fuse the window frame into the pane separators underneath.
+
+Do **not** introduce a separate popup/z-order system. Registration order is the z-order, and a floating widget already costs no layout space.
 
 ---
 
 ## Workspace concept
 
-The **Workspace** is the rectangular region between TabBar and CmdLine. It is the **only** place where recursive splits exist. Applications commonly add their own shell type above the layout to own pane policy (which pane may host which view, placement rules, marks); termforge deliberately has no opinion there.
+The **Workspace** is everything below the TabBar, cmdline row included. It is the **only** place where recursive splits exist. Applications commonly add their own shell type above the layout to own pane policy (which pane may host which view, placement rules, marks); termforge deliberately has no opinion there.
 
 Workspace panes are **widgets** — views bound to application **models** owned by the application's controllers. A typical mapping:
 
@@ -455,7 +467,7 @@ Each leaf pane in the split tree has a one-row **status band** at local `y = c.H
 3. Redraw split separators (`redrawGrid`) — restores border glyphs and default style
 4. Paint status on **every** leaf (`DrawStatusLine`) — focused bar vs inactive name overlay (no dash fill)
 
-Panes set a display name via `BaseWidget.PaneName` (e.g. `"Code"`, `"Log"`) or override `DrawStatusLine`. Chrome that never occupies a pane (`TabWidget`, `CmdWidget`, `CompletionBarWidget`) implements no status method at all — it is a plain `Widget`, not a `NodeWidget`. Prefer `StatusLabel()` when the copyable text differs from `PaneName` (Code uses the full source path).
+Panes set a display name via `BaseWidget.PaneName` (e.g. `"Code"`, `"Log"`) or override `DrawStatusLine`. Chrome that never occupies a pane (`TabWidget`, overlays) implements no status method at all — it is a plain `Widget`, not a `NodeWidget`. The pinned cmdline leaf is a `NodeWidget` via `BaseWidget`, but leaves `PaneName` empty, so its status paint is a no-op. Prefer `StatusLabel()` when the copyable text differs from `PaneName` (Code uses the full source path).
 
 **Mouse on the status band** (row at `Bottom()` of the leaf, outside content):
 

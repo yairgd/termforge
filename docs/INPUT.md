@@ -122,7 +122,7 @@ flowchart TB
     Trie["Trie.SearchPartial"]
     Tab["TabWidget.HandleEvent"]
     Cmd["CmdWidget.HandleEvent"]
-    Comp["CompletionBarWidget"]
+    Comp["CompletionView"]
 
     Select --> Poll --> Batch
     Batch -->|"EventKey / Mouse / Resize"| TermHandler
@@ -344,7 +344,7 @@ flowchart LR
 Flow:
 
 1. User presses `:` → the application sets `ModeCommand` and calls `CmdWidget.Activate()`.
-2. User types a partial command and presses **Tab** → parser `SuggestionNames` → `Publish(CompletionMsg)`; `CompletionBarWidget` shows the wildmenu and the app enters `ModeCompletion`.
+2. User types a partial command and presses **Tab** → parser `SuggestionNames` → `Publish(CompletionMsg)`; the `CompletionView` shows the wildmenu and the app enters `ModeCompletion`.
 3. User presses **Enter** → `CommandParser.Parse` + `Execute` → leaf `Action` runs (e.g. `OnFocusLeft`).
 4. The tree itself is built once at startup via the [command DSL](COMMAND_SYSTEM.md#dsl--building-the-tree).
 

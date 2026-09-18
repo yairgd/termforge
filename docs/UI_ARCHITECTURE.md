@@ -65,8 +65,8 @@ type Widget interface {
 ```
 
 A pane in the split tree additionally paints its own status row, which is a
-separate interface so that chrome and containers — a `Layout`, an overlay, a
-`CmdWidget` — are `Widget`s without carrying a status method they never use:
+separate interface so that chrome and containers — a `Layout`, an overlay —
+are `Widget`s without carrying a status method they never use:
 
 ```go
 type StatusLineDrawer interface {
@@ -135,7 +135,7 @@ classDiagram
     BaseWidget <|-- TableWidget
 ```
 
-**`BaseWidget`** (`base_widget.go`) provides shared helpers for app panes: event channels, `PaneName`, and a default `DrawStatusLine` that paints a styled bar (`▎ {name}`) when `active` is true. Embedding it is what makes a widget a `NodeWidget`; set `PaneName` in the constructor, or override `DrawStatusLine` for custom behavior. Chrome that never occupies a pane (`TabWidget`, `CmdWidget`) needs no status method at all.
+**`BaseWidget`** (`base_widget.go`) provides shared helpers for app panes: event channels, `PaneName`, and a default `DrawStatusLine` that paints a styled bar (`▎ {name}`) when `active` is true. Embedding it is what makes a widget a `NodeWidget`; set `PaneName` in the constructor, or override `DrawStatusLine` for custom behavior. An empty `PaneName` paints nothing, which is how the pinned cmdline leaf sits in the tree without a status row. Chrome that never occupies a pane (`TabWidget`, overlays) needs no status method at all.
 
 **Terminal building blocks:**
 
@@ -268,8 +268,11 @@ flowchart TB
 |-----------|-------------|--------------|--------|
 | `Vertical` | Left (proportional via `Units()`) | Right (remainder) | 1 column separator |
 | `Horizontal` | Top (proportional via `Units()`) | Bottom (remainder) | 1 row separator |
+| `Horizontal` + `FixedSecond` | Top (everything left over) | Bottom (exactly `FixedSecond` rows) | 1 row separator |
 
 The gutter column/row is where `DrawVerticalLocal` / `DrawHorizontalLocal` write border cells into the shared `Grid`.
+
+**`FixedSecond` is for pinned chrome, not panes.** It ignores `Ratio` and skips the `minPaneCells` clamp, which is the only way to express a 1-row leaf; `CollectLeaves` hides such a leaf so focus, `:close`, `:only` and separator drags never reach it. The cmdline is its one user. A transient window (wildmenu, help) must not get a node here — it belongs in the App's floating tier, which costs no layout space.
 
 **Design decision:** `BuildLayout` sizes children using **`Units()`** (leaf-count weighting along the split axis). The `Ratio` field is set at split time (`0.5` default) and updated by `ComputeRatios` / `Rebalance`, but the current build path uses unit counts rather than `Ratio` directly.
 
@@ -411,7 +414,7 @@ Current behavior:
 | `ModeInsert` | Focused leaf widget (e.g. a terminal pane) |
 | `ModeCommand` | `CmdWidget` (`CmdKindCommand`) only |
 | `ModeSearch` | `CmdWidget` (`CmdKindSearch`) + live highlight on focused `SearchHost` |
-| `ModeCompletion` | `CompletionBarWidget` wildmenu (Esc → `ModeCommand`) |
+| `ModeCompletion` | `CompletionView` wildmenu (Esc → `ModeCommand`) |
 
 **Planned behavior** (see [INPUT.md](INPUT.md)):
 

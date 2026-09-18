@@ -56,13 +56,28 @@ func WalkPostOrder(n *Node, fn func(*Node)) {
 	fn(n)
 }
 
-// CollectLeaves returns all leaf nodes under n in left-to-right order.
+// CollectLeaves returns the pane leaves under n in left-to-right order.
+//
+// Chrome pinned with FixedSecond (the cmdline) is skipped: it is a leaf so the
+// tree draws it and gives it geometry, but it is not a pane. Leaving it out
+// here is what keeps focus movement, :close, :only, click-to-focus and
+// separator hit-testing behaving as if it were not in the tree at all. Use
+// WalkLeaves when you do want every leaf, as Draw does.
 func CollectLeaves(n *Node) []*Node {
 	var leaves []*Node
 	WalkLeaves(n, func(leaf *Node) {
+		if pinnedChrome(leaf) {
+			return
+		}
 		leaves = append(leaves, leaf)
 	})
 	return leaves
+}
+
+// pinnedChrome reports whether n is the fixed-size Second child of its parent.
+func pinnedChrome(n *Node) bool {
+	return n != nil && n.parent != nil &&
+		n.parent.FixedSecond > 0 && n.parent.Second == n
 }
 
 // Units returns the directional weight of subtree n along dir.
