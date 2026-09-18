@@ -48,21 +48,23 @@ func (a *DemoApp) Init() error {
 	// later :vs / :split. ':equal' equalizes on demand instead.
 	a.State().SetEqualAlways(false)
 	a.layout.SetEqualAlways(false)
+	// Chrome banding, top to bottom: workspace fills what the two rows below it
+	// leave over, the completion bar overlays the row above the cmdline.
 	a.AddWidget(a.tab)
 
-	a.AddWidget(termforge.NewCompletionBarWidget(a.ctx))
+	a.AddRowWidget(termforge.NewCompletionBarWidget(a.ctx), 1)
 
 	a.cmdWidget = termforge.NewCmdWidget(a.commandReg)
 	a.cmdWidget.Ctx = a.ctx
 	a.cmdWidget.SetPostInterrupt(a.PostInterrupt)
 	a.cmdWidget.SetClipboard(a.ClipboardIO())
-	a.AddWidget(a.cmdWidget)
+	a.AddRowWidget(a.cmdWidget, 1)
 
 	// Added last so it paints over the workspace: the App draws widgets in
 	// registration order into one grid.
 	a.help = demo.NewHelpOverlay()
 	a.help.SetClipboard(a.ClipboardIO())
-	a.AddWidget(a.help)
+	a.AddFloatingWidget(a.help, helpRect)
 
 	if a.ctx.Bus != nil {
 		platform.Subscribe(a.ctx.Bus, func(msg termforge.SubmitMsg) {

@@ -15,26 +15,14 @@ import (
 
 type AppApi interface {
 	HandleMouse(ev *tcell.EventMouse)
-	HandleResize()
 	HandleInterrupt(ev *tcell.EventInterrupt)
 	// HandleTTYResume runs after Suspend/Resume or RunForeground; reset in-pane terminals.
 	HandleTTYResume()
 }
 
-type WidgetNode struct {
-	widget Widget
-	rect   Rect
-}
-
-func (w *WidgetNode) SetRect(r Rect) {
-	w.rect = r
-}
-func (w *WidgetNode) Rect() Rect     { return w.rect }
-func (w *WidgetNode) Widget() Widget { return w.widget }
-
 type App struct {
 	Api     AppApi
-	widgets []WidgetNode
+	widgets WidgetsList
 	screen  tcell.Screen
 	exit    bool
 	// widgets draw here all the time
@@ -68,16 +56,35 @@ func NewApp() *App {
 	screen.EnableMouse(tcell.MouseMotionEvents)
 	screen.EnablePaste()
 
-	return &App{
+	app := &App{
 		screen:       screen,
 		exit:         false,
 		modeHandlers: make(ModeKeyHandlers),
 		appState:     platform.NewAppState(),
 	}
+	app.UpdateCanvas()
+	return app
 }
 
-func (app *App) Widgets() []WidgetNode { return app.widgets }
-func (app *App) Exit()                 { app.exit = true }
+func (app *App) Exit() { app.exit = true }
+
+// AddWidget registers chrome that fills the rows the fixed-height ones leave
+// over (the workspace band). See WidgetsList for the placement rules.
+func (app *App) AddWidget(w Widget) { app.widgets.AddWidget(w) }
+
+// AddRowWidget registers a full-width band of rows rows, stacked below the
+// chrome registered before it.
+func (app *App) AddRowWidget(w Widget, rows int) { app.widgets.AddRowWidget(w, rows) }
+
+// AddFloatingWidget registers a widget placed by rect on every frame, painted
+// over the chrome registered before it.
+func (app *App) AddFloatingWidget(w Widget, rect func(Canvas) Rect) {
+	app.widgets.AddFloatingWidget(w, rect)
+}
+
+// WidgetRect returns the screen rect the layout gave w, or the zero Rect when w
+// is not registered. Used by mouse routing to find the surface under a click.
+func (app *App) WidgetRect(w Widget) Rect { return app.widgets.Rect(w) }
 
 func (app *App) Mode() platform.Mode {
 	return app.appState.Mode()
@@ -175,7 +182,6 @@ func (app *App) restoreAfterResume() {
 	_ = app.UpdateCanvas()
 	app.layoutDirty = true
 	if app.Api != nil {
-		app.Api.HandleResize()
 		app.Api.HandleTTYResume()
 	}
 	app.drainTcellEventQueue()
@@ -258,12 +264,6 @@ func (app *App) RunForeground(argv []string) error {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
-	})
-}
-
-func (app *App) AddWidget(w Widget) {
-	app.widgets = append(app.widgets, WidgetNode{
-		widget: w,
 	})
 }
 
@@ -410,6 +410,9 @@ func (app *App) UpdateCanvas() Canvas {
 	w, h := app.screen.Size()
 	app.frontBuffer = NewGrid(w, h)
 	app.canvas = Canvas{rect: NewRect(0, 0, w, h), grid: app.frontBuffer}
+	// Mouse routing hit-tests widget rects between frames, so the new geometry
+	// has to be there before the first paint on the resized canvas.
+	app.widgets.BuildLayout(app.canvas)
 	return app.canvas
 }
 
@@ -424,10 +427,8 @@ func (app *App) Draw(c Canvas) {
 	}
 	c.grid.HideCursor()
 
-	for _, w := range app.widgets {
-		w.widget.Draw(Canvas{rect: w.rect, grid: c.grid})
-	}
-
+	app.widgets.BuildLayout(c)
+	app.widgets.Draw(c)
 	if app.mouseActive && !c.grid.nativeCursorSet {
 		c.grid.ShowCursor(app.mouseX, app.mouseY)
 	}
@@ -480,11 +481,10 @@ func (a *App) HandleEvent(ev tcell.Event) {
 		}
 
 	case *tcell.EventResize:
+		// UpdateCanvas rebuilds the chrome geometry for the new size; panes get
+		// theirs from the layout on the next paint. Apps have nothing to add.
 		_ = a.UpdateCanvas()
 		a.layoutDirty = true
-		if a.Api != nil {
-			a.Api.HandleResize()
-		}
 
 	case *tcell.EventInterrupt:
 		switch data := e.Data().(type) {
@@ -505,16 +505,14 @@ func (a *App) HandleEvent(ev tcell.Event) {
 		// Command/completion mode: only the cmdline should receive paste
 		// (GDB may still be the focused tab leaf).
 		if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
-			for i := range a.widgets {
-				if _, ok := a.widgets[i].widget.(*CmdWidget); ok {
-					a.widgets[i].widget.HandleEvent(e)
+			a.widgets.ForEach(func(w Widget) {
+				if _, ok := w.(*CmdWidget); ok {
+					w.HandleEvent(e)
 				}
-			}
+			})
 			return
 		}
-		for i := range a.widgets {
-			a.widgets[i].widget.HandleEvent(e)
-		}
+		a.widgets.HandleEvent(ev)
 	}
 
 }

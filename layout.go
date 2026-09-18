@@ -9,8 +9,9 @@ package termforge
 // A Tab is a container for layouts of any kind and knows nothing beyond this
 // interface: it calls BuildLayout to hand down the assigned canvas, then Draw,
 // and routes events through HandleEvent. *WidgetTree is the Vim-style tiling
-// implementation; a future layout (a different window arrangement, a single
-// full-tab form, a whole embedded app) implements the same interface.
+// implementation and *WidgetsList the flat one the App uses for its chrome; a
+// future layout (a different window arrangement, a single full-tab form, a
+// whole embedded app) implements the same interface.
 //
 // A Layout draws no status line of its own: in the tiling tree every pane
 // paints its own status row. A layout nested inside a pane must therefore also

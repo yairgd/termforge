@@ -452,7 +452,7 @@ termforge separates **terminal events** from **domain events**.
 
 | Plane | Type | Handler |
 |-------|------|---------|
-| Terminal | `tcell.Event` | `App.HandleEvent` → `AppApi.HandleKey` / `HandleResize` |
+| Terminal | `tcell.Event` | `App.HandleEvent` → `AppApi.HandleKey` / `App.UpdateCanvas` |
 | Domain | `termforge.Event` | **`AppApi.HandleCoreEvents`** — single application dispatch hub |
 
 ### Terminal dispatch (current)
@@ -464,7 +464,7 @@ flowchart TB
     Bus["<- events · termforge.Event"]
     TermHandler["App.HandleEvent"]
     HandleKey["AppApi.HandleKey"]
-    HandleResize["AppApi.HandleResize"]
+    Resize["App.UpdateCanvas"]
     Router["AppApi impl · AppState.Mode()"]
     Trie["Trie.SearchPartial"]
     Widgets["TabWidget / CmdWidget"]
@@ -476,7 +476,7 @@ flowchart TB
     Select --> Bus
     Poll --> TermHandler
     TermHandler -->|"EventKey"| HandleKey --> Router
-    TermHandler -->|"EventResize"| HandleResize
+    TermHandler -->|"EventResize"| Resize
     Router --> Trie
     Router --> Widgets --> Draw --> Flush
     Bus --> Core
@@ -491,7 +491,7 @@ Global keys handled by `App`:
 | Key / event | Action |
 |-------------|--------|
 | `Ctrl+D` | Exit application |
-| `EventResize` | `UpdateCanvas()`; `AppApi.HandleResize()` sets widget rects |
+| `EventResize` | `UpdateCanvas()` — reallocates the grid and rebuilds the chrome rects |
 | `EventInterrupt` | Redraw request (`termforge-redraw`) |
 
 Application keys handled by the `AppApi` implementation (`HandleKey`). A Vim-style application typically binds:
@@ -514,7 +514,6 @@ Any subsystem can publish to `App.events` (`Events() chan termforge.Event`). The
 type AppApi interface {
     HandleCoreEvents(ev Event)          // all domain events land here
     HandleKey(ev *tcell.EventKey)       // mode routing, trie, widget dispatch
-    HandleResize()                      // assign top-level widget rects
 }
 ```
 
@@ -555,13 +554,12 @@ sequenceDiagram
     Main->>App: NewApp()
     App->>Screen: Init, EnableMouse
     Main->>App: InitB · AddWidget tab + cmdWidget
-    Main->>App: HandleResize() · initial layout
     loop until exit
         App->>Screen: select: drain termforge.Event OR PollEvent
         alt termforge.Event on bus
             App->>App: HandleCoreEvents(ev)
         else tcell event
-            App->>App: HandleEvent · HandleKey / HandleResize
+            App->>App: HandleEvent · HandleKey / UpdateCanvas
             App->>App: Draw + frontBuffer.Draw + Show
         end
     end
@@ -571,8 +569,10 @@ sequenceDiagram
 `AppApi` is implemented by the application:
 
 - `HandleKey` — mode routing, trie dispatch, widget `HandleEvent`.
-- `HandleResize` — top-level widget rects after `UpdateCanvas`.
 - `HandleCoreEvents` — **all** domain events from the bus.
+
+Resize needs no application hook: `App` reallocates the grid and the layouts recompute
+their geometry from the new canvas.
 
 `AppAPI` in `app_api.go` (`Publish`, `RequestRedraw`, …) is a separate planned surface for widgets; not yet wired everywhere.
 

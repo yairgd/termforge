@@ -167,27 +167,22 @@ imports them.
 into one grid:
 
 ```go
-a.AddWidget(a.tab)                                        // workspace: tabs + split tree
-a.AddWidget(termforge.NewCompletionBarWidget(a.ctx))      // wildmenu
-a.AddWidget(a.cmdWidget)                                  // ':' command line
-a.AddWidget(a.help)                                       // floating window, painted last
+a.AddWidget(a.tab)                                          // workspace: tabs + split tree
+a.AddRowWidget(termforge.NewCompletionBarWidget(a.ctx), 1)  // wildmenu
+a.AddRowWidget(a.cmdWidget, 1)                              // ':' command line
+a.AddFloatingWidget(a.help, helpRect)                       // floating window, painted last
 ```
 
-Order is the whole trick behind the floating window: the help overlay is added last, so
-it paints over the workspace, and it owns no layout space. `HandleResize` gives the first
-three widgets fixed bands and hands the overlay a centered rect:
-
-```go
-w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()-2))   // workspace band
-w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))   // completion bar
-w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))   // command line
-w[3].SetRect(helpRect(c))                         // help window
-```
+How a widget is registered is also how it is placed: the two rows take one line each at
+the bottom, the workspace fills what is left (`H-2`), and the help overlay owns no layout
+space at all — `helpRect` positions it per frame. Order is the whole trick behind the
+floating window: added last, it paints over the workspace. Nothing recomputes rects on
+resize; the App's `WidgetsList` rebuilds them from the new canvas.
 
 `helpRect` caps the window at 78×24, keeps a margin of panes visible around it so it
 reads as floating, and returns the zero `Rect` when the terminal is too small to frame a
-window — `Draw` skips widgets without geometry, so a tiny terminal simply shows no
-window instead of crashing.
+window — the overlay's `Draw` returns early without geometry, so a tiny terminal simply
+shows no window instead of crashing.
 
 Input is split by interaction mode, each registered with `RegisterModeHandler`:
 

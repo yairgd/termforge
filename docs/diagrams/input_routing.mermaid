@@ -4,7 +4,7 @@ flowchart TB
     Bus["<- events · termforge.Event"]
     TermHandler["App.HandleEvent"]
     HandleKey["AppApi.HandleKey"]
-    HandleResize["AppApi.HandleResize"]
+    Resize["App.UpdateCanvas"]
     Router["AppApi impl · AppState.Mode()"]
     Trie["Trie.SearchPartial"]
     Tab["TabWidget.HandleEvent"]
@@ -15,7 +15,7 @@ flowchart TB
     Select --> Bus
     Poll --> TermHandler
     TermHandler -->|"EventKey"| HandleKey --> Router
-    TermHandler -->|"EventResize"| HandleResize
+    TermHandler -->|"EventResize"| Resize
     Router -->|"ModeNormal"| Trie
     Router -->|"ModeNormal"| Tab
     Router -->|"ModeNormal · colon"| Cmd

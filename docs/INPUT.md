@@ -32,7 +32,7 @@ Keyboard / Mouse / async workers
 App.Run (UI thread · pollEventBatch)
         ├── PollEvent → tcell.Event
         │     ├── EventKey / EventMouse / EventResize → App.HandleEvent
-        │     │       ├── EventResize → UpdateCanvas, AppApi.HandleResize
+        │     │       ├── EventResize → UpdateCanvas (grid + chrome rects)
         │     │       └── EventKey → AppApi.HandleKey → mode router / Trie / widgets
         │     └── EventInterrupt → HandleInterrupt → EventBus → *Ctl
         └── paint ticker (16ms) when dirty
@@ -86,8 +86,9 @@ sequenceDiagram
 ### Dispatch (current)
 
 1. `App.HandleEvent` — global shortcuts (`Ctrl+D` quit, resize → `UpdateCanvas`, redraw interrupt).
-2. `AppApi.HandleResize` — assign top-level chrome rects (tab / completion bar / cmdline; see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
-3. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
+   A resize needs no application hook: `UpdateCanvas` reallocates the grid and the chrome
+   layout recomputes its rects (see [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md)).
+2. `AppApi.HandleKey` — application-level key routing by `AppState.Mode()`:
    - **Global (every mode)** — wrap the per-mode handlers so a few keys work
      regardless of mode. Job control and confirmation gates belong here, not in
      `Mode`: they are orthogonal state machines that must fire while the user is
@@ -115,7 +116,7 @@ flowchart TB
     Batch["handleUIEventBatch"]
     TermHandler["App.HandleEvent"]
     HandleKey["AppApi.HandleKey"]
-    HandleResize["AppApi.HandleResize"]
+    Resize["App.UpdateCanvas"]
     HandleInt["HandleInterrupt → EventBus"]
     Router["Application · AppState.Mode()"]
     Trie["Trie.SearchPartial"]
@@ -127,7 +128,7 @@ flowchart TB
     Batch -->|"EventKey / Mouse / Resize"| TermHandler
     Batch -->|"EventInterrupt"| HandleInt
     TermHandler -->|"EventKey"| HandleKey --> Router
-    TermHandler -->|"EventResize"| HandleResize
+    TermHandler -->|"EventResize"| Resize
     Router -->|"ModeNormal"| Trie
     Router -->|"ModeNormal"| Tab
     Router -->|"ModeInsert"| Tab

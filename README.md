@@ -22,8 +22,8 @@ the structure and stays out of your domain.
 ```go
 app := termforge.NewApp()
 app.InitB(myApp)                  // myApp implements termforge.AppApi
-app.AddWidget(tabWidget)
-app.AddWidget(cmdWidget)
+app.AddWidget(tabWidget)          // fills what the rows below leave over
+app.AddRowWidget(cmdWidget, 1)    // one-row band at the bottom
 app.Run()
 ```
 

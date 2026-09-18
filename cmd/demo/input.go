@@ -21,7 +21,7 @@ func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {
 	// The help window paints over the workspace, so it takes the pointer while
 	// open. A click outside closes it, then falls through to the pane under it.
 	if a.help.Visible() {
-		if a.widgetRect(a.help).Contains(x, y) {
+		if a.WidgetRect(a.help).Contains(x, y) {
 			a.help.HandleEvent(ev)
 			a.RequestFrame()
 			return
@@ -33,7 +33,7 @@ func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {
 		}
 	}
 
-	inCmd := a.widgetRect(a.cmdWidget).Contains(x, y)
+	inCmd := a.WidgetRect(a.cmdWidget).Contains(x, y)
 
 	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
 		if middle && a.cmdWidget != nil {
@@ -71,22 +71,11 @@ func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {
 	a.RequestFrame()
 }
 
-// widgetRect returns the screen rect the App assigned to w, or the zero Rect
-// when w is not registered. A zero Rect contains no point.
-func (a *DemoApp) widgetRect(w termforge.Widget) termforge.Rect {
-	for _, n := range a.Widgets() {
-		if n.Widget() == w {
-			return n.Rect()
-		}
-	}
-	return termforge.Rect{}
-}
-
 func (a *DemoApp) clickCmdLine(screenX int) {
 	if a.cmdWidget == nil {
 		return
 	}
-	a.cmdWidget.SetCursorAtLocalX(screenX - a.widgetRect(a.cmdWidget).X())
+	a.cmdWidget.SetCursorAtLocalX(screenX - a.WidgetRect(a.cmdWidget).X())
 	a.RequestFrame()
 }
 
@@ -98,19 +87,6 @@ func (a *DemoApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	case termforge.SubmitMsg:
 		a.ctx.Bus.Dispatch(ev.Data())
 	}
-}
-
-func (a *DemoApp) HandleResize() {
-	c := a.UpdateCanvas()
-	w := a.Widgets()
-	if len(w) < 4 {
-		return
-	}
-	// Workspace band is H-2; completion bar overlays row H-2; cmdline at H-1.
-	w[0].SetRect(c.ChildRect(0, 0, c.W(), c.H()-2))
-	w[1].SetRect(c.ChildRect(0, c.H()-2, c.W(), 1))
-	w[2].SetRect(c.ChildRect(0, c.H()-1, c.W(), 1))
-	w[3].SetRect(helpRect(c))
 }
 
 const (

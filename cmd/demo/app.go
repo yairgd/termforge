@@ -39,7 +39,6 @@ func NewDemoApp() (*DemoApp, error) {
 		a.Close()
 		return nil, err
 	}
-	a.HandleResize()
 	return a, nil
 }
 

@@ -97,7 +97,7 @@ func (t *TabWidget) HandleEvent(ev tcell.Event) {
 }
 
 // Draw lays out and paints the active tab's layout using the full assigned
-// rect. Apps own chrome banding (cmdline / wildmenu) via HandleResize.
+// rect. Chrome banding (cmdline / wildmenu) is the App's WidgetsList job.
 func (t *TabWidget) Draw(c Canvas) {
 	l := t.Layout()
 	if l == nil {

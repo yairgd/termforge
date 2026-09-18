@@ -17,7 +17,6 @@ func (w *paintCountWidget) Draw(Canvas)             { w.draws.Add(1) }
 type paintTestAPI struct{ app *App }
 
 func (m *paintTestAPI) HandleMouse(*tcell.EventMouse) {}
-func (m *paintTestAPI) HandleResize()                 {}
 func (m *paintTestAPI) HandleTTYResume()              {}
 func (m *paintTestAPI) HandleInterrupt(ev *tcell.EventInterrupt) {
 	if s, ok := ev.Data().(string); ok && s == "quit" {
