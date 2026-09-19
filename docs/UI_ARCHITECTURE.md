@@ -150,6 +150,7 @@ classDiagram
 | `LoggerWidget` | Log pane over a `platform.Sink` |
 | `CmdWidget` | Vim-style `:` / `/` command line |
 | `TabWidget` | Tab container, one `WidgetTree` per tab |
+| `TabBarWidget` | Tab titles on one chrome row, active one highlighted |
 
 **Showing a view** swaps the widget on the focused leaf — an O(1) pointer swap, with no split, no new window, and no reload. The tree never learns the concrete widget type, so an application is free to keep singleton views, create panes on demand, or mix both. Applications typically keep a registry of named views and a jump list so the outgoing view can be restored.
 
@@ -276,7 +277,7 @@ The gutter column/row is where `DrawVerticalLocal` / `DrawHorizontalLocal` write
 
 **Design decision:** `BuildLayout` sizes children using **`Units()`** (leaf-count weighting along the split axis). The `Ratio` field is set at split time (`0.5` default) and updated by `ComputeRatios` / `Rebalance`, but the current build path uses unit counts rather than `Ratio` directly.
 
-Each tab owns a `WidgetTree` directly (no intermediate `Layout` type). `TabWidget.Draw` calls `BuildLayout` then `Draw` on the active tree.
+Each tab owns its content as a `Layout`, which is a `WidgetTree` in practice. `TabWidget.Draw` calls `BuildLayout` then `Draw` on the active tab only, so an inactive tab costs nothing per frame and keeps the geometry it had when it was last on screen.
 
 Implementation: `widget_tree.go` (`buildLayout`), `tab.go`.
 
@@ -594,7 +595,8 @@ These ship with termforge. Application panes are built by embedding them or `Bas
 | `InputLine` | `input_line.go` | Shared readline editor + history |
 | `LoggerWidget` | `logger_widget.go` | Log pane — `platform.Sink`, scroll/clear, shared Viewport clipboard |
 | `CmdWidget` | `cmd_widget.go` | Vim-style `:` / `/` cmdline mux (`CmdKindCommand` / `CmdKindSearch`), Tab completion, execute / search callbacks |
-| `TabWidget` | `tab.go` | Tab container forwarding to a per-tab `WidgetTree` |
+| `TabWidget` | `tab.go` | Tab container forwarding to the active tab's `Layout` |
+| `TabBarWidget` | `tab_bar.go` | Tab titles as a chrome row; `TabAt` maps a click column to a tab |
 | `BaseWidget` | `base_widget.go` | Shared pane helpers: `PaneName`, event channel, default status line |
 
 Widget hierarchy target:

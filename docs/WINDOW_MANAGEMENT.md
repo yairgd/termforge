@@ -73,17 +73,20 @@ graph TB
 - It is still a stable anchor: `FixedSecond` holds it to exactly one row at the bottom edge, whatever the pane ratios do, and `CollectLeaves` hides it so focus movement, `:close`, `:only` and separator drags behave as if it were not in the tree.
 - Transient chrome (wildmenu, help, future message bars) is **not** in the tree. It goes in the App's floating tier, which reserves no space — **no popup compositor**.
 
+**Note:** the command line is global, but it lives in a per-tab layout, so every tree has to be given it (`PinBottom` at setup, again after a `:layout` remount, and once per tab). Sharing one `CmdWidget` across tabs works because only the active tab is laid out and painted, so the widget is drawn once per frame wherever the user is. If that ever stops holding, the alternative is an App-level root compositor owning a fixed-height bottom region for every tab at once.
+
 **App chrome** is a `WidgetsList` — the flat `Layout` at App level, the counterpart of `WidgetTree` inside the workspace. Apps declare the placement once at setup time and never compute rects on resize:
 
 ```go
+a.AddRowWidget(a.tabBar, 1)                          // TabBarWidget: fixed row, top of the screen
 a.AddWidget(a.tab)                                   // TabWidget: fills what the rows leave
 a.SetCmdline(a.cmdWidget)                            // paste target in command mode
-a.layout.PinBottom(a.cmdWidget, 1)                   // CmdWidget (: line), bottom of the tree
+tree.PinBottom(a.cmdWidget, 1)                       // CmdWidget (: line), bottom of each tab's tree
 a.AddFloatingWidget(a.completionPopup, popupRect)    // rect recomputed per frame
 a.AddFloatingWidget(a.help, helpRect)
 ```
 
-`WidgetsList.BuildLayout` stacks any rows top to bottom in registration order and gives the fill widget everything left over; floating widgets are placed by their callback and contribute nothing to the row math. `TabWidget.Draw` uses its full assigned rect, so the workspace now spans `H` rows with the cmdline on `H-1` and its separator on `H-2`. `App.Draw` paints in registration order, so anything floating registered after the tab covers it.
+`WidgetsList.BuildLayout` stacks any rows top to bottom in registration order and gives the fill widget everything left over; floating widgets are placed by their callback and contribute nothing to the row math. `TabWidget.Draw` uses its full assigned rect, so with a tab bar on row `0` the workspace spans rows `1..H-1`, with the cmdline on `H-1` and its separator on `H-2`. `App.Draw` paints in registration order, so anything floating registered after the tab covers it.
 
 Geometry is rebuilt on every frame and on every `UpdateCanvas`, so a resize needs no application hook at all — `AppApi` has none. `App.WidgetRect(w)` returns the rect a widget was given, for mouse routing; the cmdline is the exception, since it lives in the tree — use `WidgetTree.PinnedBottomRect()`.
 
@@ -95,7 +98,7 @@ Three placements, and the choice is about lifetime, not looks:
 |--------|-----------|---------|
 | Transient window | `AddFloatingWidget` at App level | wildmenu (`CompletionPopupWidget`), help overlay |
 | Permanent full-width edge | pinned tree leaf via `PinBottom` | the `:` command line |
-| Permanent band outside the workspace | `AddRowWidget` | a future tab bar |
+| Permanent band outside the workspace | `AddRowWidget` | the tab bar (`TabBarWidget`) |
 
 For an overlay:
 
@@ -402,21 +405,58 @@ type TabWidget struct {
 }
 ```
 
-Its whole surface is `Layout()`, `SetLayout()`, `Draw`, `HandleEvent` and the two constructors.
+Its surface is the two constructors, `AddTab`, the selection calls (`Count`, `ActiveIndex`, `Titles`, `SetActive`, `NextTab`, `PrevTab`), `Layout()` / `SetLayout()`, and `Draw` / `HandleEvent`. Nothing on it reaches into a `Layout`.
+
+Only the active tab is laid out and painted, so an inactive tab costs nothing per frame and keeps the focus, ratios and drags it had when it was last on screen. Switching is therefore just an index move — `SetActive` reports whether the index actually changed, so a host can skip the repaint when it did not.
 
 | Feature | Status |
 |---------|--------|
-| Single tab container | Implemented |
+| Several tabs in one container | Implemented (`AddTab`) |
 | Hand events/draw to active tab's Layout | Implemented |
+| Tab switching | Implemented (`SetActive` / `NextTab` / `PrevTab`) |
+| Tab header rendering | Implemented (`TabBarWidget`, a chrome row) |
 | Named leaf marks on WidgetTree | Implemented |
 | Generic non-tree tab content | Implemented (`Layout` interface); no second implementation yet |
 | Nested layout inside a leaf | Structurally supported; focus arbitration not implemented |
-| Tab header rendering | Not implemented |
-| Tab switching | Not implemented |
-| Tab close / new tab | Not implemented |
+| Tab close | Not implemented |
 | Persist layout per tab | Not implemented |
 
 **Design decision:** a tab is a **workspace preset**, not a separate session. One tab might hold "document + console" while another holds "charts + log". Binding a distinct session per tab is left to the application.
+
+### The tab bar
+
+`TabBarWidget` paints the titles on one full-width chrome row, registered with `AddRowWidget` **before** the workspace widget so it takes the top line:
+
+```go
+a.tab.AddTab("columns", secondTree)  // built at startup, active tab unchanged
+a.tabBar = termforge.NewTabBarWidget(a.tab)
+a.AddRowWidget(a.tabBar, 1)
+a.AddWidget(a.tab)
+```
+
+It reads the titles and the active index off the `TabWidget` on every paint, so adding a tab or switching one in needs nothing kept in sync. Like other chrome it does not route its own input — `WidgetsList.HandleEvent` broadcasts without geometry — so the host hit-tests it:
+
+```go
+if r := a.WidgetRect(a.tabBar); r.Contains(x, y) {
+    if i := a.tabBar.TabAt(x - r.X()); a.tab.SetActive(i) {
+        a.RequestFrame()
+    }
+    return
+}
+```
+
+`TabAt` returns `-1` for the empty run past the last label, and `SetActive` ignores it, so a click on the bare part of the bar does nothing instead of falling through to a pane.
+
+Since the split tree is per tab, an application holding a `*WidgetTree` in a field would go stale the moment a tab is switched in. Take the active tree from the one accessor that narrows the interface instead:
+
+```go
+func (a *App) Layout() *termforge.WidgetTree {
+    tree, _ := a.tab.Layout().(*termforge.WidgetTree)
+    return tree
+}
+```
+
+Anything a host wants to reach across tabs — "focus the pane named `log`" — needs its own map from the name to the tab that holds it, because a tree only knows its own leaves. `cmd/demo` does this for `:b`.
 
 ---
 
@@ -522,7 +562,8 @@ application displays — belongs in the application's own session type, not here
 | `:split` / `:vsplit` | Split focused pane horizontally / vertically | **Done** (`:vs` / `:split`) |
 | `:close` | Close focused pane (collapse split) | Partial |
 | `:focus left/right/up/down` | Move focus | **Done** (`:window` / Ctrl-W) |
-| `:tabnew` / `:tabclose` / `:tabn` | Tab management | Planned |
+| `:tabn` / `:tabp` | Switch tabs | **Done** (`TabWidget.NextTab` / `PrevTab`; `:tab next\|prev` in the demo) |
+| `:tabnew` / `:tabclose` | Create / close a tab at runtime | Planned (`AddTab` exists; there is no close) |
 | `:only` | Collapse to single pane | **Done** (`:only` / Ctrl-W o) |
 | `:resize +N/-N` | Adjust split ratio | Planned |
 

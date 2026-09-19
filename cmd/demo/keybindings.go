@@ -26,6 +26,14 @@ func (a *DemoApp) InitKeyBindings() {
 		"<C-w>j", "<C-w><Down>",
 	)
 	a.keyBindings.Bind(
+		commands.NewCommand("tab-next", func(args ...any) { a.NextTab() }),
+		"gt",
+	)
+	a.keyBindings.Bind(
+		commands.NewCommand("tab-prev", func(args ...any) { a.PrevTab() }),
+		"gT",
+	)
+	a.keyBindings.Bind(
 		commands.NewCommand("escape", func(args ...any) { a.onEscape() }),
 		"<Esc>",
 	)
@@ -61,16 +69,16 @@ func (a *DemoApp) onEscape() {
 		a.leaveCommandMode()
 		return
 	}
-	if a.layout != nil {
-		a.layout.SetInsertActive(false)
+	if lay := a.Layout(); lay != nil {
+		lay.SetInsertActive(false)
 	}
 	a.SetMode(platform.ModeNormal)
 	a.RequestFrame()
 }
 
 func (a *DemoApp) enterCommandMode() {
-	if a.layout != nil {
-		a.layout.SetInsertActive(false)
+	if lay := a.Layout(); lay != nil {
+		lay.SetInsertActive(false)
 	}
 	if a.cmdWidget != nil && !a.cmdWidget.Active() {
 		a.cmdWidget.Activate()

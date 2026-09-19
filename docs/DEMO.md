@@ -8,7 +8,7 @@ description: The termforge demo application — a runnable host app that shows p
 one question: *what does an app have to write, and what does the framework already do?*
 Everything visible — split geometry, separator drag, wheel scrolling, text selection,
 command parsing, Tab completion, key sequences — comes from termforge. The demo supplies
-four panes, ten commands, and a help window.
+two tabs of panes, eleven commands, and a help window.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [INPUT.md](INPUT.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)
 
@@ -39,14 +39,21 @@ or type `:help` for the reference window, and `Ctrl-D` to leave.
 
 ## What you see
 
+Two tabs, listed in a one-row bar across the top. `gt` / `gT`, `:tab next|prev`, or a
+click on a title switches between them; each tab owns a whole split tree, so switching
+swaps the geometry, the focused pane and the ratios in one move.
+
 ```text
-┌──────────────┬──────────────┐
-│              │ table        │
-│ main         ├──────────────┤
-│              │ side         │
-├──────────────┴──────────────┤
-│ log                         │
-└─────────────────────────────┘
+ 1 panes  2 columns             <- TabBarWidget, one chrome row
+
+┌──────────────┬──────────────┐  ┌─────────────────────────────┐
+│              │ table        │  │ notes                       │
+│ main         ├──────────────┤  ├───────┬──────────┬──────────┤
+│              │ side         │  │ keys  │ mouse    │ about    │
+├──────────────┴──────────────┤  │       │          │          │
+│ log                         │  │       │          │          │
+└─────────────────────────────┘  └───────┴──────────┴──────────┘
+        tab 1 — panes                   tab 2 — columns
 ```
 
 | Pane | Widget | Why it is there |
@@ -89,6 +96,18 @@ must not move the outer `main`/`log` one. `demo.BuildDefault` splits evenly firs
 sets the ratios once the shape is final: `0.70` for the workspace band over the log,
 `0.62` for `main` against the right column, `0.5` between `table` and `side`.
 
+The second tab is there to be a different shape rather than a second copy of the first.
+`demo.BuildColumns` nests its vertical splits inside each other:
+
+```text
+Horizontal( notes, Vertical( keys, Vertical(mouse, about) ) )
+```
+
+Three columns under a banner, so `Ctrl-W l` crosses two separators in a row and the
+banner's separator meets all three — paths the first tab's tree never exercises. Its
+panes are static text: the key list, the mouse gestures, and a note on what the demo
+does and does not supply.
+
 ---
 
 ## Commands
@@ -99,7 +118,8 @@ with four children, `:b` and `:help` are rest-arg leaves with completion callbac
 | Command | Does |
 |---------|------|
 | `:window left\|right\|up\|down` | Move focus to the adjacent pane |
-| `:b main\|table\|side\|log` | Focus a pane by name (Tab completes) |
+| `:tab next\|prev` | Switch tabs, wrapping at either end |
+| `:b main\|side\|keys\|about\|…` | Focus a pane by name, switching tabs to reach it (Tab completes) |
 | `:vs` / `:split` | Split the focused pane side by side / stacked |
 | `:close` | Delete the focused pane; refuses the last one and logs a warning |
 | `:only` | Collapse the tree to the focused pane |
@@ -109,7 +129,11 @@ with four children, `:b` and `:help` are rest-arg leaves with completion callbac
 | `:quit` | Close the focused pane; exit once it was the last |
 
 `:quit` follows Vim and peels off one pane at a time, while `Ctrl-D` exits immediately
-however many panes are open.
+however many panes are open. Closing the last pane of a tab exits too: `TabWidget` has
+no close operation yet, so the demo never has a tab to fall back to.
+
+`:b` is the one command that reaches across tabs. Each pane is registered under a name
+with the tab that holds it, so naming a pane in the other tab switches to it first.
 
 ---
 
@@ -118,6 +142,7 @@ however many panes are open.
 | Key | Action |
 |-----|--------|
 | `?` | Open the help window |
+| `gt` / `gT` | Next / previous tab |
 | `:` | Command mode |
 | `Tab` | Complete a command or pane name (wildmenu bar) |
 | `i` / `Esc` | Insert mode / back to normal, and close the help window |
@@ -127,6 +152,7 @@ however many panes are open.
 
 | Pointer | Action |
 |---------|--------|
+| Click a tab title | Switch to that tab (`TabBarWidget.TabAt`) |
 | Click a pane | Focus it (`WidgetTree.FocusAt`) |
 | Drag a separator | Resize the two adjacent panes only |
 | Wheel | Scroll the pane under the pointer, focused or not |
@@ -150,13 +176,13 @@ imports them.
 |------|----------|
 | `cmd/demo/main.go` | `main`, `-version`, construct and run |
 | `cmd/demo/app.go` | `DemoApp` struct — embeds `*termforge.App`, sets `App.Api = a` |
-| `cmd/demo/setup.go` | `Init`: builds panes, layout, chrome, mode handlers |
+| `cmd/demo/setup.go` | `Init`: builds the two tabs' panes and trees, chrome, mode handlers |
 | `cmd/demo/actions.go` | The command tree and every command handler |
 | `cmd/demo/keybindings.go` | Normal and insert key registries, mode transitions |
 | `cmd/demo/input.go` | Mouse routing, resize band math, per-mode key handlers |
 | `cmd/demo/help.go` | Help text as app data, plus the `:help` pages |
 | `internal/demo/scroll_pane.go` | `ScrollPane` — read-only text pane |
-| `internal/demo/layout.go` | `BuildDefault` — the nested tree and its ratios |
+| `internal/demo/layout.go` | `BuildDefault` / `BuildColumns` — one tree per tab, with their ratios |
 | `internal/demo/help_overlay.go` | `HelpOverlay` — floating, scrollable window |
 
 ---
@@ -167,18 +193,25 @@ imports them.
 into one grid:
 
 ```go
-a.AddWidget(a.tab)                     // workspace: tabs + split tree, fills the screen
+a.AddRowWidget(a.tabBar, 1)            // tab titles: a fixed row at the top
+a.AddWidget(a.tab)                     // workspace: tabs + split tree, fills what is left
 a.SetCmdline(a.cmdWidget)              // paste target in command mode
-a.layout.PinBottom(a.cmdWidget, 1)     // ':' command line — a pinned leaf, not a band
+tree.PinBottom(a.cmdWidget, 1)         // ':' command line — a pinned leaf, not a band
 a.AddFloatingWidget(a.help, helpRect)  // floating window, painted last
 ```
 
-How a widget is registered is also how it is placed. The workspace fills the screen; the
-cmdline is a 1-row leaf pinned to the bottom of the split tree, so the line above it is
-that split's own separator. The help overlay owns no layout space at all — `helpRect`
-positions it per frame. Order is the whole trick behind the floating window: added last,
-it paints over the workspace. Nothing recomputes rects on resize; the App's `WidgetsList`
-rebuilds them from the new canvas.
+How a widget is registered is also how it is placed. The tab bar is a fixed row and comes
+first, so it takes the top line; the workspace fills the rest. The cmdline is a 1-row leaf
+pinned to the bottom of the split tree, so the line above it is that split's own separator.
+The help overlay owns no layout space at all — `helpRect` positions it per frame. Order is
+the whole trick behind the floating window: added last, it paints over the workspace.
+Nothing recomputes rects on resize; the App's `WidgetsList` rebuilds them from the new
+canvas.
+
+The cmdline is one widget shared by both trees, because it is global and the tree it is
+pinned into is per tab: `wireTree` pins it, and applies the rest of the wiring a freshly
+built tree does not carry — status clipboard, resize hook, `equalalways`. Only the active
+tab is laid out and painted, so the shared widget is only ever drawn once per frame.
 
 `helpRect` caps the window at 78×24, keeps a margin of panes visible around it so it
 reads as floating, and returns the zero `Rect` when the terminal is too small to frame a
@@ -217,6 +250,12 @@ falls through to the pane below.
 **Deleting the last pane is the caller's policy.** `WidgetTree.DeleteFocus` reports
 `true` when it declined, which `:close` turns into a logged warning and `:quit` turns
 into exiting the app.
+
+**One accessor narrows the `Layout`.** With two tabs there is no single tree to keep in a
+field, so `DemoApp.Layout()` type-asserts the active tab's `Layout` to `*WidgetTree` and
+every command goes through it. Nothing has to be updated when a tab is switched in, and a
+tab hosting some other `Layout` later would show up as a nil return rather than a stale
+pointer to the tree it replaced.
 
 ---
 

@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/yairgd/termforge"
 )
@@ -32,7 +33,9 @@ func TestCommandTableIsAligned(t *testing.T) {
 		t.Fatalf("got %d rows for %d commands", len(lines), len(demoCommands))
 	}
 
-	// Every row must start its help column at the same offset.
+	// Every row must start its help column at the same screen column, which is
+	// a rune count: a usage string holding a '…' is longer in bytes than the
+	// columns it takes.
 	want := -1
 	for i, line := range lines {
 		usage := demoCommands[i].Usage
@@ -40,10 +43,11 @@ func TestCommandTableIsAligned(t *testing.T) {
 		if idx < 0 {
 			t.Fatalf("row %d missing usage %q: %q", i, usage, line)
 		}
-		col := strings.Index(line, demoCommands[i].Help)
-		if col < 0 {
+		at := strings.Index(line, demoCommands[i].Help)
+		if at < 0 {
 			t.Fatalf("row %d missing help text: %q", i, line)
 		}
+		col := utf8.RuneCountInString(line[:at])
 		if want == -1 {
 			want = col
 		} else if col != want {

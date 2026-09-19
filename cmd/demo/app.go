@@ -15,16 +15,33 @@ type DemoApp struct {
 	insertKeys  *commands.KeyBindingRegistry
 
 	tab       *termforge.TabWidget
-	layout    *termforge.WidgetTree
+	tabBar    *termforge.TabBarWidget
 	cmdWidget *termforge.CmdWidget
 	ctx       platform.AppContext
 
-	mainPane  *demo.ScrollPane
-	sidePane  *demo.ScrollPane
-	tablePane *termforge.TableWidget
-	logPane   *termforge.LoggerWidget
-	help      *demo.HelpOverlay
-	builtins  map[string]termforge.Widget
+	help *demo.HelpOverlay
+	// builtins are the panes ':b' can name, in declaration order.
+	builtins     map[string]paneRef
+	builtinNames []string
+}
+
+// paneRef is one named pane: the widget and the tab whose tree holds it, so
+// ':b' can reach a pane that is not on screen.
+type paneRef struct {
+	widget termforge.Widget
+	tab    int
+}
+
+// Layout returns the active tab's split tree — the single place the demo
+// narrows the Layout interface to the concrete tiling type. It is nil if a tab
+// ever hosts a Layout that is not a tree, which is the signal that pane and
+// split operations do not apply.
+func (a *DemoApp) Layout() *termforge.WidgetTree {
+	if a == nil || a.tab == nil {
+		return nil
+	}
+	tree, _ := a.tab.Layout().(*termforge.WidgetTree)
+	return tree
 }
 
 // NewDemoApp builds and initializes the demo TUI.
@@ -32,7 +49,7 @@ func NewDemoApp() (*DemoApp, error) {
 	a := &DemoApp{
 		App:        termforge.NewApp(),
 		commandReg: commands.NewCommandRegistry(),
-		builtins:   make(map[string]termforge.Widget),
+		builtins:   make(map[string]paneRef),
 	}
 	a.App.Api = a
 	if err := a.Init(); err != nil {

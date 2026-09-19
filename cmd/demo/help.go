@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // demoCommand documents one DSL command. termforge's CommandNode carries no
 // description field, so the demo keeps help as its own data rather than
@@ -14,7 +17,8 @@ type demoCommand struct {
 // Declaration order is display order in the help window.
 var demoCommands = []demoCommand{
 	{"window", ":window left|right|up|down", "Move focus to the adjacent pane."},
-	{"b", ":b main|table|side|log", "Focus a pane by name."},
+	{"tab", ":tab next|prev", "Switch to the next or previous tab."},
+	{"b", ":b main|side|keys|about|…", "Focus a pane, switching tabs to reach it."},
 	{"vs", ":vs", "Split the focused pane side by side."},
 	{"split", ":split", "Split the focused pane stacked."},
 	{"close", ":close", "Delete the focused pane."},
@@ -22,7 +26,7 @@ var demoCommands = []demoCommand{
 	{"equal", ":equal", "Reset every split to an even ratio."},
 	{"clear", ":clear", "Clear the focused pane's contents."},
 	{"help", ":help [command]", "Open this window, or help for one command."},
-	{"quit", ":quit", "Close the pane; exit when it is the last."},
+	{"quit", ":quit", "Close the pane; exit on this tab's last."},
 }
 
 func findCommand(name string) (demoCommand, bool) {
@@ -58,9 +62,10 @@ func helpOverview() []string {
 	lines := []string{
 		"termforge demo — a host application with no debugger in it.",
 		"",
-		"Four panes in a nested split tree, a ':' command line, mouse-driven",
-		"focus and resize, and this floating window. Everything here is",
-		"framework machinery; the demo only supplies panes and commands.",
+		"Two tabs, each a split tree of its own, a ':' command line,",
+		"mouse-driven focus and resize, and this floating window. Everything",
+		"here is framework machinery; the demo only supplies panes, the two",
+		"tab layouts and a handful of commands.",
 		"",
 		"COMMANDS",
 	}
@@ -68,6 +73,7 @@ func helpOverview() []string {
 	lines = append(lines,
 		"",
 		"MOUSE",
+		"  click tab title     switch to that tab",
 		"  click pane          focus it",
 		"  click status label  double-click copies the pane name",
 		"  drag separator      resize the two adjacent panes only",
@@ -76,6 +82,7 @@ func helpOverview() []string {
 		"  click cmdline       focus it and place the caret",
 		"",
 		"KEYS",
+		"  gt / gT             next / previous tab",
 		"  ?                   open this window",
 		"  :                   command line",
 		"  Tab                 complete a command or pane name",
@@ -87,17 +94,19 @@ func helpOverview() []string {
 	return lines
 }
 
-// commandTable renders the command list with the help column aligned.
+// commandTable renders the command list with the help column aligned. Padding
+// counts runes, not bytes: a usage string with a '…' in it is fewer columns
+// wide than it is long.
 func commandTable() []string {
 	width := 0
 	for _, c := range demoCommands {
-		if n := len(c.Usage); n > width {
+		if n := utf8.RuneCountInString(c.Usage); n > width {
 			width = n
 		}
 	}
 	out := make([]string, 0, len(demoCommands))
 	for _, c := range demoCommands {
-		pad := strings.Repeat(" ", width-len(c.Usage))
+		pad := strings.Repeat(" ", width-utf8.RuneCountInString(c.Usage))
 		out = append(out, "  "+c.Usage+pad+"   "+c.Help)
 	}
 	return out

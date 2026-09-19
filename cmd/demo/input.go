@@ -33,6 +33,17 @@ func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {
 		}
 	}
 
+	// The tab bar is a chrome row above the workspace, so it is hit-tested
+	// against the rect the App chrome list gave it, not against the tree.
+	if primary {
+		if r := a.WidgetRect(a.tabBar); r.Contains(x, y) {
+			if i := a.tabBar.TabAt(x - r.X()); a.tab.SetActive(i) {
+				a.RequestFrame()
+			}
+			return
+		}
+	}
+
 	inCmd := a.cmdLineRect().Contains(x, y)
 
 	if a.Mode() == platform.ModeCommand || a.Mode() == platform.ModeCompletion {
@@ -59,8 +70,8 @@ func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {
 	}
 
 	// Touching a pane with any button makes it the focused pane.
-	if (primary || wheel || middle) && a.layout != nil {
-		a.layout.FocusAt(x, y)
+	if lay := a.Layout(); lay != nil && (primary || wheel || middle) {
+		lay.FocusAt(x, y)
 	}
 
 	// Drives separator drag, status-label copy, and the pane's own wheel and
@@ -75,10 +86,11 @@ func (a *DemoApp) HandleMouse(ev *tcell.EventMouse) {
 // App chrome list, because the cmdline is a leaf pinned to the bottom of the
 // workspace tree. The zero Rect contains no point, so hit tests fail closed.
 func (a *DemoApp) cmdLineRect() termforge.Rect {
-	if a.layout == nil {
+	lay := a.Layout()
+	if lay == nil {
 		return termforge.Rect{}
 	}
-	return a.layout.PinnedBottomRect()
+	return lay.PinnedBottomRect()
 }
 
 func (a *DemoApp) clickCmdLine(screenX int) {
@@ -192,8 +204,9 @@ func (a *DemoApp) tryKeyBindings(reg *commands.KeyBindingRegistry, ev *tcell.Eve
 }
 
 func (a *DemoApp) focusedWidget() termforge.Widget {
-	if a.layout == nil {
+	lay := a.Layout()
+	if lay == nil {
 		return nil
 	}
-	return a.layout.FocusedWidget()
+	return lay.FocusedWidget()
 }
