@@ -37,13 +37,13 @@ func TestTableTruncateInPaint(t *testing.T) {
 	tbl.AddColumnWidth("X", 4)
 	tbl.AddRow("hello-world")
 
-	buf := NewCellBuffer(4, 1)
+	g := NewGrid(4, 1)
+	c := NewCanvas(g).WithRect(NewRect(0, 0, 4, 1))
 	rv := NewRectViewport()
-	tbl.PaintVisibleDefault(buf, rv, 4, 1)
+	tbl.PaintVisibleDefault(c, rv, 4, 1)
 
-	cell, _ := buf.Get(3, 0)
-	if cell.Rune != '…' {
-		t.Fatalf("last rune=%q want ellipsis", cell.Rune)
+	if got := g.Cells[3][0].Rune; got != '…' {
+		t.Fatalf("last rune=%q want ellipsis", got)
 	}
 }
 
@@ -55,25 +55,23 @@ func TestTableStickyHeaderAndVerticalPan(t *testing.T) {
 		tbl.AddRow(string(rune('a' + i)))
 	}
 
-	buf := NewCellBuffer(3, 3) // 1 header + 2 data rows visible
+	g := NewGrid(3, 3) // 1 header + 2 data rows visible
+	c := NewCanvas(g).WithRect(NewRect(0, 0, 3, 3))
 	rv := NewRectViewport()
 	rv.SetOrigin(0, 2)
 
-	tbl.PaintVisibleDefault(buf, rv, 3, 3)
+	tbl.PaintVisibleDefault(c, rv, 3, 3)
 
 	// row 0 = header
-	h0, _ := buf.Get(0, 0)
-	if h0.Rune != 'A' {
-		t.Fatalf("header=%q want A", h0.Rune)
+	if got := g.Cells[0][0].Rune; got != 'A' {
+		t.Fatalf("header=%q want A", got)
 	}
 	// row 1 = data row 2 ('c')
-	d0, _ := buf.Get(0, 1)
-	if d0.Rune != 'c' {
-		t.Fatalf("data row0=%q want c", d0.Rune)
+	if got := g.Cells[0][1].Rune; got != 'c' {
+		t.Fatalf("data row0=%q want c", got)
 	}
-	d1, _ := buf.Get(0, 2)
-	if d1.Rune != 'd' {
-		t.Fatalf("data row1=%q want d", d1.Rune)
+	if got := g.Cells[0][2].Rune; got != 'd' {
+		t.Fatalf("data row1=%q want d", got)
 	}
 }
 
@@ -85,20 +83,49 @@ func TestTableHorizontalPan(t *testing.T) {
 	tbl.SetGutter(1)
 	tbl.AddRow("aaaa", "bbbb")
 
-	buf := NewCellBuffer(5, 1)
+	g := NewGrid(5, 1)
+	c := NewCanvas(g).WithRect(NewRect(0, 0, 5, 1))
 	rv := NewRectViewport()
 	rv.SetOrigin(5, 0) // align window start with second column
 
-	tbl.PaintVisibleDefault(buf, rv, 5, 1)
+	tbl.PaintVisibleDefault(c, rv, 5, 1)
 
 	var b strings.Builder
 	for x := 0; x < 5; x++ {
-		c, _ := buf.Get(x, 0)
-		b.WriteRune(c.Rune)
+		b.WriteRune(g.Cells[x][0].Rune)
 	}
 	got := strings.TrimSpace(b.String())
 	if got != "bbbb" {
 		t.Fatalf("panned line=%q want bbbb", got)
+	}
+}
+
+// PaintVisible writes straight to the Canvas, which clips to the screen rather
+// than the pane. A title and header need more rows than a one-row window has,
+// so neither may paint outside it.
+func TestTablePaintClipsToWindowHeight(t *testing.T) {
+	tbl := NewTable()
+	tbl.SetTitle("T")
+	tbl.SetShowTitle(true)
+	tbl.SetShowHeader(true)
+	tbl.AddColumn("A")
+	tbl.AddRow("a")
+
+	g := NewGrid(2, 3)
+	c := NewCanvas(g).WithRect(NewRect(0, 0, 2, 1))
+	rv := NewRectViewport()
+
+	tbl.PaintVisibleDefault(c, rv, 2, 1)
+
+	if got := g.Cells[0][0].Rune; got != 'T' {
+		t.Fatalf("title=%q want T", got)
+	}
+	for y := 1; y < 3; y++ {
+		for x := 0; x < 2; x++ {
+			if got := g.Cells[x][y].Rune; got != 0 {
+				t.Fatalf("cell (%d,%d)=%q should be untouched", x, y, got)
+			}
+		}
 	}
 }
 
@@ -133,6 +160,37 @@ func TestTableWidgetDrawAndPanKeys(t *testing.T) {
 	w.HandleFocusKey(evLeft)
 	if w.rv.Origin.X != 0 {
 		t.Fatalf("Origin.X=%d want 0 with narrow content", w.rv.Origin.X)
+	}
+}
+
+// A pane created by :vs sits at a non-zero rect origin. Drawing there must stay
+// inside the pane's columns and rows, not spill onto its siblings.
+func TestTableWidgetDrawClipsToOffsetPane(t *testing.T) {
+	ctx := platform.NewAppContext()
+	w := NewTableWidget(ctx)
+	tbl := w.Table()
+	tbl.SetTitle("Title")
+	tbl.SetShowTitle(true)
+	tbl.SetShowHeader(true)
+	tbl.AddColumn("WideHeader")
+	for i := 0; i < 6; i++ {
+		tbl.AddRow("row" + string(rune('0'+i)))
+	}
+
+	g := NewGrid(9, 5)
+	pane := NewCanvas(g).WithRect(NewRect(3, 1, 3, 2))
+	w.Draw(pane)
+
+	for x := 0; x < 9; x++ {
+		for y := 0; y < 5; y++ {
+			inPane := x >= 3 && x < 6 && y >= 1 && y < 3
+			if got := g.Cells[x][y].Rune; !inPane && got != 0 {
+				t.Fatalf("cell (%d,%d)=%q outside pane should be untouched", x, y, got)
+			}
+		}
+	}
+	if got := g.Cells[3][1].Rune; got != 'T' {
+		t.Fatalf("pane origin=%q want T", got)
 	}
 }
 

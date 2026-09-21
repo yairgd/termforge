@@ -166,7 +166,7 @@ flowchart TB
 
 ## Viewport: two paint paths (PTY ANSI vs native Canvas)
 
-**Line-based panes** use **`termforge.Viewport`** over a **`platform.Buffer`**. **Tabular list panes** use **`TableWidget`** → `CellBuffer` + `RectViewport` instead — see [TableWidget paint path](#tablewidget-paint-path) below.
+**Line-based panes** use **`termforge.Viewport`** over a **`platform.Buffer`**. **Tabular list panes** use **`TableWidget`** → `RectViewport` instead — see [TableWidget paint path](#tablewidget-paint-path) below.
 
 At draw time, `Viewport.Draw` picks one of two painters — a **mux** on the `ANSI` flag (not a separate type):
 
@@ -189,7 +189,7 @@ flowchart TB
 |------|-----------------|-----------------|-------------|----------------|
 | **PTY / foreign** | `true` | May contain `\x1b[…m` from terminal tools | `Canvas.DrawANSIText` parses SGR → `SetContent` | Any pane fed by a child process on a PTY |
 | **Native / app-built** | `false` (default) | Plain UTF-8 only | `SetContent(rune, tcell.Style)` per column | Panes whose text the application generates |
-| **Table lists** | N/A (no Viewport) | Column cells in `Table` | `CellBuffer` blit → `Canvas` | Row/column list panes |
+| **Table lists** | N/A (no Viewport) | Column cells in `Table` | `SetContent` per cell → `Canvas` | Row/column list panes |
 
 **Path 1 — data from TTY / PTY (CompositeTerminal panes)**
 
@@ -221,15 +221,19 @@ Implementation: `viewport.go` (`Draw`, `ANSI` field), `utf.go` (`DrawANSIText`).
 Tabular list panes do **not** use `platform.Buffer` / `Viewport`. Paint stack:
 
 ```text
-SetFill(model) → Table layout → RectViewport (origin) → CellBuffer (window) → Canvas → Grid
+SetFill(model) → Table layout → RectViewport (origin) → Canvas → Grid
 ```
 
 | Piece | Role |
 |-------|------|
 | `Table` | Columns, rows, auto column width, sticky title/header |
 | `RectViewport` | Pan when contentW/contentH exceeds pane; `EnsureRowVisible` scrolls Y only |
-| `CellBuffer` | Off-screen rune+style grid for visible slice |
 | `TablePaintState` | `RowStyleFunc` + `/search` highlight spans |
+
+`Table.PaintVisible` writes the visible slice straight to the `Canvas` with no
+intermediate buffer. `Canvas.SetContent` clips to the screen rather than the
+pane, so `PaintVisible` bounds every write to the `windowW`/`windowH` it was
+given — a title or header must not paint into a pane too short to hold it.
 
 Row colors (selection, markers, gutter) come from the application widget's `SetRowStyleFunc`, not embedded `\x1b` sequences.
 

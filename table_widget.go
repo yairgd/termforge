@@ -16,7 +16,6 @@ type TableWidget struct {
 	BaseWidget
 	table *Table
 	rv    *RectViewport
-	buf   *CellBuffer
 	fill  TableFillFunc
 
 	selectedRow int
@@ -365,11 +364,7 @@ func (w *TableWidget) Draw(c Canvas) {
 	w.lastH = c.H()
 	w.screenX = c.ScreenX(0)
 	w.screenY = c.ScreenY(0)
-	if w.buf == nil {
-		w.buf = NewCellBuffer(w.lastW, w.lastH)
-	}
-	w.table.PaintVisible(w.buf, w.rv, w.lastW, w.lastH, w.paintState())
-	w.buf.BlitTo(c, 0, 0)
+	w.table.PaintVisible(c, w.rv, w.lastW, w.lastH, w.paintState())
 }
 
 func (w *TableWidget) DrawStatusLine(c Canvas, active bool) {

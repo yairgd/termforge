@@ -589,7 +589,7 @@ These ship with termforge. Application panes are built by embedding them or `Bas
 | Widget | File | Role |
 |--------|------|--------|
 | `Viewport` | `viewport.go` | Scrollable line view over `platform.Buffer`; native and ANSI paint paths |
-| `TableWidget` | `table_widget.go` | Columnar list: `RectViewport`, `CellBuffer`, selection, `/search`, copy |
+| `TableWidget` | `table_widget.go` | Columnar list: `RectViewport`, selection, `/search`, copy |
 | `CompositeTerminal` | `composite_terminal.go` | xterm emulator + key trie + `WireTTY` attach |
 | `ConsolePane` | `console_pane.go` | Line-based REPL shell (scrollback + walking prompt + `InputLine`) |
 | `InputLine` | `input_line.go` | Shared readline editor + history |

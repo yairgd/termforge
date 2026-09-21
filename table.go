@@ -185,7 +185,7 @@ func mergeCellStyle(cell, row tcell.Style) tcell.Style {
 }
 
 func (t *Table) paintContentRunes(
-	buf *CellBuffer,
+	c Canvas,
 	wy int,
 	originX int,
 	windowW int,
@@ -204,7 +204,7 @@ func (t *Table) paintContentRunes(
 		if col > 0 {
 			for g := 0; g < gutter; g++ {
 				if xContent >= originX && xContent < originX+windowW {
-					buf.Set(xContent-originX, wy, ' ', rowStyle)
+					c.SetContent(xContent-originX, wy, ' ', rowStyle)
 				}
 				xContent++
 			}
@@ -223,14 +223,14 @@ func (t *Table) paintContentRunes(
 				ch = rs[i]
 			}
 			if xContent >= originX && xContent < originX+windowW {
-				buf.Set(xContent-originX, wy, ch, ps.cellStyle(dataRow, col, i, st))
+				c.SetContent(xContent-originX, wy, ch, ps.cellStyle(dataRow, col, i, st))
 			}
 			xContent++
 		}
 	}
 }
 
-func (t *Table) paintTitle(buf *CellBuffer, lay tableLayout, wy, originX, windowW int) {
+func (t *Table) paintTitle(c Canvas, lay tableLayout, wy, originX, windowW int) {
 	if !lay.hasTitle || windowW <= 0 {
 		return
 	}
@@ -241,11 +241,11 @@ func (t *Table) paintTitle(buf *CellBuffer, lay tableLayout, wy, originX, window
 		if cx >= 0 && cx < len(rs) {
 			ch = rs[cx]
 		}
-		buf.Set(wx, wy, ch, t.titleStyle)
+		c.SetContent(wx, wy, ch, t.titleStyle)
 	}
 }
 
-func (t *Table) paintHeader(buf *CellBuffer, lay tableLayout, wy, originX, windowW int) {
+func (t *Table) paintHeader(c Canvas, lay tableLayout, wy, originX, windowW int) {
 	if !lay.hasHeader {
 		return
 	}
@@ -253,16 +253,21 @@ func (t *Table) paintHeader(buf *CellBuffer, lay tableLayout, wy, originX, windo
 	for i, col := range t.columns {
 		cells[i] = TableCell{Text: col.Name}
 	}
-	t.paintContentRunes(buf, wy, originX, windowW, lay, cells, -1, TablePaintState{RowStyle: func(int) tcell.Style { return t.headerStyle }})
+	t.paintContentRunes(c, wy, originX, windowW, lay, cells, -1, TablePaintState{RowStyle: func(int) tcell.Style { return t.headerStyle }})
 }
 
-// PaintVisible renders the visible slice into buf (window-sized).
-func (t *Table) PaintVisible(buf *CellBuffer, rv *RectViewport, windowW, windowH int, ps TablePaintState) {
-	if buf == nil || rv == nil {
+// PaintVisible renders the visible slice straight into c, clipped to
+// windowW x windowH. Canvas.SetContent clips to the screen, not the pane, so
+// every write below stays inside those bounds.
+func (t *Table) PaintVisible(c Canvas, rv *RectViewport, windowW, windowH int, ps TablePaintState) {
+	if rv == nil {
 		return
 	}
-	buf.EnsureSize(windowW, windowH)
-	buf.Clear(tcell.StyleDefault)
+	for y := 0; y < windowH; y++ {
+		for x := 0; x < windowW; x++ {
+			c.SetContent(x, y, ' ', tcell.StyleDefault)
+		}
+	}
 
 	lay := t.Layout()
 	dataH := windowH - lay.stickyRows
@@ -275,11 +280,15 @@ func (t *Table) PaintVisible(buf *CellBuffer, rv *RectViewport, windowW, windowH
 
 	wy := 0
 	if lay.hasTitle {
-		t.paintTitle(buf, lay, wy, rv.Origin.X, windowW)
+		if wy < windowH {
+			t.paintTitle(c, lay, wy, rv.Origin.X, windowW)
+		}
 		wy++
 	}
 	if lay.hasHeader {
-		t.paintHeader(buf, lay, wy, rv.Origin.X, windowW)
+		if wy < windowH {
+			t.paintHeader(c, lay, wy, rv.Origin.X, windowW)
+		}
 		wy++
 	}
 
@@ -288,19 +297,19 @@ func (t *Table) PaintVisible(buf *CellBuffer, rv *RectViewport, windowW, windowH
 		if row >= 0 && row < len(t.rows) {
 			cells = t.rows[row]
 		}
-		t.paintContentRunes(buf, wy, rv.Origin.X, windowW, lay, cells, row, ps)
+		t.paintContentRunes(c, wy, rv.Origin.X, windowW, lay, cells, row, ps)
 		wy++
 	}
 	for ; wy < windowH; wy++ {
 		for x := 0; x < windowW; x++ {
-			buf.Set(x, wy, ' ', t.rowStyle)
+			c.SetContent(x, wy, ' ', t.rowStyle)
 		}
 	}
 }
 
 // PaintVisibleDefault paints with no row styling or search highlights.
-func (t *Table) PaintVisibleDefault(buf *CellBuffer, rv *RectViewport, windowW, windowH int) {
-	t.PaintVisible(buf, rv, windowW, windowH, TablePaintState{})
+func (t *Table) PaintVisibleDefault(c Canvas, rv *RectViewport, windowW, windowH int) {
+	t.PaintVisible(c, rv, windowW, windowH, TablePaintState{})
 }
 
 func (t *Table) ContentOverflows(windowW, windowH int) bool {
