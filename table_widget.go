@@ -66,7 +66,12 @@ func (w *TableWidget) Table() *Table { return w.table }
 
 func (w *TableWidget) SetFill(fn TableFillFunc) { w.fill = fn }
 
-func (w *TableWidget) RectViewport() *RectViewport { return w.rv }
+// ResetHorizontalPan scrolls back to the leftmost column, leaving the vertical
+// position alone. Call it when the row model is replaced.
+func (w *TableWidget) ResetHorizontalPan() { w.rv.Origin.X = 0 }
+
+// HorizontalPan is the first content column drawn at the pane's left edge.
+func (w *TableWidget) HorizontalPan() int { return w.rv.Origin.X }
 
 func (w *TableWidget) SetRowStyleFunc(fn func(row int) tcell.Style) { w.rowStyleFn = fn }
 
@@ -359,12 +364,21 @@ func (w *TableWidget) SelectedText() string {
 func (w *TableWidget) HasSelection() bool { return w.cellSel != nil }
 
 func (w *TableWidget) Draw(c Canvas) {
+	dx := 0
+	dy := 0
 	w.syncFill()
 	w.lastW = c.W()
 	w.lastH = c.H()
 	w.screenX = c.ScreenX(0)
 	w.screenY = c.ScreenY(0)
-	w.table.PaintVisible(c, w.rv, w.lastW, w.lastH, w.paintState())
+	//	w.rv.SetOrigin(2, 2)
+
+	inner := c.WithRect(c.ChildRect(dx, dy, c.W()-dx, c.H()-dy))
+	//	w.lastW, w.lastH = inner.W(), inner.H()
+	//	w.screenX, w.screenY = inner.ScreenX(0), inner.ScreenY(0)
+	w.table.PaintVisible(inner, w.rv, w.lastW, w.lastH, w.paintState())
+
+	// w.table.PaintVisible(c, w.rv, w.lastW, w.lastH, w.paintState())
 }
 
 func (w *TableWidget) DrawStatusLine(c Canvas, active bool) {

@@ -28,12 +28,12 @@ func TestTableWidgetSelectionPreservesHorizontalPan(t *testing.T) {
 	if !w.HandleFocusKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)) {
 		t.Fatal("Right")
 	}
-	if w.RectViewport().Origin.X != 1 {
-		t.Fatalf("Origin.X=%d want 1", w.RectViewport().Origin.X)
+	if w.HorizontalPan() != 1 {
+		t.Fatalf("HorizontalPan=%d want 1", w.HorizontalPan())
 	}
 	w.HandleFocusKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
-	if w.RectViewport().Origin.X != 1 {
-		t.Fatalf("Origin.X reset on Down: %d", w.RectViewport().Origin.X)
+	if w.HorizontalPan() != 1 {
+		t.Fatalf("HorizontalPan reset on Down: %d", w.HorizontalPan())
 	}
 	if w.SelectedRow() != 1 {
 		t.Fatalf("selected=%d want 1", w.SelectedRow())

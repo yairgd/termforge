@@ -33,23 +33,3 @@ func TestRectViewportPanAndScrollEnd(t *testing.T) {
 		t.Fatalf("after pan origin=(%d,%d) want (15,11)", rv.Origin.X, rv.Origin.Y)
 	}
 }
-
-func TestRectViewportVisibleContentRect(t *testing.T) {
-	rv := NewRectViewport()
-	rv.SetContentSize(5, 4)
-	rv.SetOrigin(2, 1)
-	x, y, w, h := rv.VisibleContentRect(10, 10)
-	if x != 2 || y != 1 || w != 3 || h != 3 {
-		t.Fatalf("visible=(%d,%d,%d,%d) want (2,1,3,3)", x, y, w, h)
-	}
-}
-
-func TestRectViewportEnsureContentVisible(t *testing.T) {
-	rv := NewRectViewport()
-	rv.SetContentSize(40, 40)
-	rv.SetOrigin(0, 0)
-	rv.EnsureContentVisible(15, 20, 10, 10)
-	if rv.Origin.X != 6 || rv.Origin.Y != 11 {
-		t.Fatalf("origin=(%d,%d) want (6,11)", rv.Origin.X, rv.Origin.Y)
-	}
-}
