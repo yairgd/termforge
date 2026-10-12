@@ -616,151 +616,42 @@ func (t *WidgetTree) FocusAt(x, y int) bool {
 	return false
 }
 
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
+// FocusRight/Left/Down/Up focus the nearest leaf on that side.
 func (t *WidgetTree) FocusRight() {
-	leaves := CollectLeaves(t.root)
-	cur := t.focus
-	curR := t.leafRect(cur)
-
-	var best *Node
-	bestScore := math.MaxInt
-
-	for _, n := range leaves {
-
-		if n == cur {
-			continue
-		}
-
-		nr := t.leafRect(n)
-		dx := nr.x - curR.Right()
-		if dx < 0 {
-			continue
-		}
-
-		dy := abs(nr.CenterY() - curR.CenterY())
-
-		score := dx*DirectionWeight + dy
-
-		if score < bestScore {
-			bestScore = score
-			best = n
-		}
-	}
-
-	if best != nil {
-		t.focus = best
-	}
+	t.focusNearest(func(cur, n Rect) (int, int) { return n.x - cur.Right(), n.CenterY() - cur.CenterY() })
 }
 
 func (t *WidgetTree) FocusLeft() {
-	leaves := CollectLeaves(t.root)
-	cur := t.focus
-	curR := t.leafRect(cur)
-
-	var best *Node
-	bestScore := math.MaxInt
-
-	for _, n := range leaves {
-
-		if n == cur {
-			continue
-		}
-
-		nr := t.leafRect(n)
-		// Must be to the left.
-		if nr.Right() > curR.x {
-			continue
-		}
-
-		dx := curR.x - nr.Right()
-		dy := abs(nr.CenterY() - curR.CenterY())
-
-		score := dx*DirectionWeight + dy
-
-		if score < bestScore {
-			bestScore = score
-			best = n
-		}
-	}
-
-	if best != nil {
-		t.focus = best
-	}
+	t.focusNearest(func(cur, n Rect) (int, int) { return cur.x - n.Right(), n.CenterY() - cur.CenterY() })
 }
 
 func (t *WidgetTree) FocusDown() {
-	leaves := CollectLeaves(t.root)
-	cur := t.focus
-	curR := t.leafRect(cur)
-
-	var best *Node
-	bestScore := math.MaxInt
-
-	for _, n := range leaves {
-
-		if n == cur {
-			continue
-		}
-
-		nr := t.leafRect(n)
-		// Must be below.
-		if nr.y < curR.Bottom() {
-			continue
-		}
-
-		dy := nr.y - curR.Bottom()
-		dx := abs(nr.CenterX() - curR.CenterX())
-
-		score := dy*DirectionWeight + dx
-
-		if score < bestScore {
-			bestScore = score
-			best = n
-		}
-	}
-
-	if best != nil {
-		t.focus = best
-	}
+	t.focusNearest(func(cur, n Rect) (int, int) { return n.y - cur.Bottom(), n.CenterX() - cur.CenterX() })
 }
 
 func (t *WidgetTree) FocusUp() {
-	leaves := CollectLeaves(t.root)
-	cur := t.focus
-	curR := t.leafRect(cur)
+	t.focusNearest(func(cur, n Rect) (int, int) { return cur.y - n.Bottom(), n.CenterX() - cur.CenterX() })
+}
 
+// focusNearest focuses the leaf with the lowest score. gap returns the distance
+// along the direction (negative = wrong side, skipped) and the off-axis offset
+// between centers; the gap counts DirectionWeight times more than the offset.
+func (t *WidgetTree) focusNearest(gap func(cur, n Rect) (along, across int)) {
+	curR := t.leafRect(t.focus)
 	var best *Node
 	bestScore := math.MaxInt
-
-	for _, n := range leaves {
-
-		if n == cur {
+	for _, n := range CollectLeaves(t.root) {
+		if n == t.focus {
 			continue
 		}
-
-		nr := t.leafRect(n)
-		// Must be above.
-		if nr.Bottom() > curR.y {
+		along, across := gap(curR, t.leafRect(n))
+		if along < 0 {
 			continue
 		}
-
-		dy := curR.y - nr.Bottom()
-		dx := abs(nr.CenterX() - curR.CenterX())
-
-		score := dy*DirectionWeight + dx
-
-		if score < bestScore {
-			bestScore = score
-			best = n
+		if score := along*DirectionWeight + absInt(across); score < bestScore {
+			best, bestScore = n, score
 		}
 	}
-
 	if best != nil {
 		t.focus = best
 	}
