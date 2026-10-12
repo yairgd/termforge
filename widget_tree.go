@@ -527,7 +527,7 @@ func (l *WidgetTree) paintStatusSelection() {
 	if start >= end {
 		return
 	}
-	c := l.leafCanvas(s.leaf)
+	c := l.leafCanvas(s.leaf).WithStatusRow()
 	active := l.insertActive
 	if s.leaf == l.focus {
 		PaintStatusBarSel(c, s.label, active, start, end)
@@ -775,14 +775,14 @@ func (l *WidgetTree) Draw(c Canvas) {
 	})
 	WalkLeaves(l.root, func(n *Node) {
 		if visible(n) {
-			ClearStatusLine(l.leafCanvas(n))
+			ClearStatusLine(l.leafCanvas(n).WithStatusRow())
 		}
 	})
 	l.redrawGrid(l.root, c)
 
 	WalkLeaves(l.root, func(n *Node) {
 		if visible(n) {
-			n.Widget.DrawStatusLine(l.leafCanvas(n), l.insertActive)
+			n.Widget.DrawStatusLine(l.leafCanvas(n).WithStatusRow(), l.insertActive)
 		}
 	})
 	l.paintStatusSelection()

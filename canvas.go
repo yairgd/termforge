@@ -50,6 +50,15 @@ func (c Canvas) WithRect(r Rect) Canvas {
 	return Canvas{rect: r, clip: clip, hasClip: true, grid: c.grid}
 }
 
+// WithStatusRow returns a copy that may also write the row just below it
+// (local y = H(), see StatusLineRow), where pane status lines are painted.
+func (c Canvas) WithStatusRow() Canvas {
+	if c.hasClip && c.clip.Bottom() == c.rect.Bottom() {
+		c.clip.h++
+	}
+	return c
+}
+
 // WithOrigin returns a copy that draws content (x,y) at local (x-p.X, y-p.Y).
 func (c Canvas) WithOrigin(p Point) Canvas {
 	c.origin = p

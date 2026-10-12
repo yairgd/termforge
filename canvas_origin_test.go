@@ -66,3 +66,24 @@ func TestCanvasChildInheritsClipAndPans(t *testing.T) {
 		t.Fatal("child bled past parent pane")
 	}
 }
+
+// Pane status lines sit on the row below the pane (StatusLineRow); the tree
+// paints them through WithStatusRow so the pane clip does not drop them.
+func TestWidgetTreeDrawsStatusLineBelowPane(t *testing.T) {
+	g := NewGrid(30, 10)
+	root := NewCanvas(g).WithRect(NewRect(0, 0, 30, 9))
+	tree := NewWidgetTree(&statusPane{})
+	tree.BuildLayout(root)
+	tree.Draw(root)
+	if got := cellRune(g, 2, 9); got != 'S' {
+		t.Fatalf("status row=%q want S", got)
+	}
+}
+
+type statusPane struct{ BaseWidget }
+
+func (p *statusPane) Draw(c Canvas)              {}
+func (p *statusPane) HandleEvent(ev tcell.Event) {}
+func (p *statusPane) DrawStatusLine(c Canvas, active bool) {
+	PaintStatusBar(c, "STATUS", active)
+}
