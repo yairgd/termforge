@@ -1,6 +1,7 @@
 package termforge
 
 import (
+	"strings"
 	"unicode/utf8"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -10,9 +11,8 @@ const defaultTableGutter = 1
 
 // TableColumn describes one table column.
 type TableColumn struct {
-	Name     string
-	Width    int // 0 = auto from header + cells
-	MinWidth int
+	Name  string
+	Width int // 0 = auto from header + cells
 }
 
 // TableCell is one cell's text and optional style.
@@ -21,36 +21,22 @@ type TableCell struct {
 	Style tcell.Style
 }
 
-// Table holds column definitions and row data (layout + paint input).
+// Table is plain data: column definitions, rows and a few display flags.
+// TableWidget does all the painting.
 type Table struct {
 	title      string
 	showTitle  bool
 	showHeader bool
+	gutter     int
 	columns    []TableColumn
 	rows       [][]TableCell
-
-	titleStyle  tcell.Style
-	headerStyle tcell.Style
-	rowStyle    tcell.Style
-	gutter      int
 }
 
-func NewTable() *Table {
-	return &Table{
-		gutter:      defaultTableGutter,
-		titleStyle:  tcell.StyleDefault.Bold(true),
-		headerStyle: tcell.StyleDefault.Bold(true),
-		rowStyle:    tcell.StyleDefault,
-	}
-}
+func NewTable() *Table { return &Table{gutter: defaultTableGutter} }
 
 func (t *Table) SetTitle(s string)       { t.title = s }
 func (t *Table) SetShowTitle(show bool)  { t.showTitle = show }
 func (t *Table) SetShowHeader(show bool) { t.showHeader = show }
-
-func (t *Table) SetTitleStyle(st tcell.Style)  { t.titleStyle = st }
-func (t *Table) SetHeaderStyle(st tcell.Style) { t.headerStyle = st }
-func (t *Table) SetRowStyle(st tcell.Style)    { t.rowStyle = st }
 
 func (t *Table) SetGutter(n int) {
 	if n < 0 {
@@ -62,10 +48,9 @@ func (t *Table) SetGutter(n int) {
 func (t *Table) Title() string    { return t.title }
 func (t *Table) ShowTitle() bool  { return t.showTitle }
 func (t *Table) ShowHeader() bool { return t.showHeader }
+func (t *Table) Gutter() int      { return t.gutter }
 
-func (t *Table) AddColumn(name string) int {
-	return t.AddColumnWidth(name, 0)
-}
+func (t *Table) AddColumn(name string) int { return t.AddColumnWidth(name, 0) }
 
 func (t *Table) AddColumnWidth(name string, width int) int {
 	t.columns = append(t.columns, TableColumn{Name: name, Width: width})
@@ -75,9 +60,7 @@ func (t *Table) AddColumnWidth(name string, width int) int {
 func (t *Table) NumCols() int { return len(t.columns) }
 func (t *Table) NumRows() int { return len(t.rows) }
 
-func (t *Table) ClearRows() {
-	t.rows = t.rows[:0]
-}
+func (t *Table) ClearRows() { t.rows = t.rows[:0] }
 
 func (t *Table) AddRow(values ...string) {
 	cells := make([]TableCell, len(values))
@@ -87,81 +70,53 @@ func (t *Table) AddRow(values ...string) {
 	t.AddRowCells(cells...)
 }
 
+// AddRowCells pads or truncates the row to the number of columns.
 func (t *Table) AddRowCells(cells ...TableCell) {
 	row := make([]TableCell, len(t.columns))
-	for i := range row {
-		if i < len(cells) {
-			row[i] = cells[i]
-		}
-	}
+	copy(row, cells)
 	t.rows = append(t.rows, row)
 }
 
-// tableLayout is computed column widths and content dimensions.
-type tableLayout struct {
-	colWidths  []int
-	contentW   int
-	stickyRows int // title + header rows pinned at window top
-	dataRows   int
-	hasTitle   bool
-	hasHeader  bool
+// CellText returns the full text of one data cell.
+func (t *Table) CellText(row, col int) string {
+	if row < 0 || row >= len(t.rows) || col < 0 || col >= len(t.rows[row]) {
+		return ""
+	}
+	return t.rows[row][col].Text
 }
 
-func (t *Table) Layout() tableLayout {
-	nc := len(t.columns)
-	lay := tableLayout{
-		colWidths: make([]int, nc),
-		hasTitle:  t.showTitle && t.title != "",
-		hasHeader: t.showHeader && nc > 0,
-		dataRows:  len(t.rows),
+// RowDisplayLine joins a row's columns with two spaces (copy format).
+func (t *Table) RowDisplayLine(row int) string {
+	if row < 0 || row >= len(t.rows) {
+		return ""
 	}
-	if lay.hasTitle {
-		lay.stickyRows++
+	parts := make([]string, len(t.rows[row]))
+	for i, c := range t.rows[row] {
+		parts[i] = c.Text
 	}
-	if lay.hasHeader {
-		lay.stickyRows++
-	}
+	return strings.Join(parts, "  ")
+}
 
+// colWidths returns each column's width: the fixed Width, or the longest of
+// the header and the cells.
+func (t *Table) colWidths() []int {
+	ws := make([]int, len(t.columns))
 	for i, col := range t.columns {
 		w := col.Width
 		if w <= 0 {
 			w = runeLen(col.Name)
 			for _, row := range t.rows {
-				if i < len(row) {
-					if cw := runeLen(row[i].Text); cw > w {
-						w = cw
-					}
+				if n := runeLen(row[i].Text); n > w {
+					w = n
 				}
 			}
 		}
-		if col.MinWidth > w {
-			w = col.MinWidth
-		}
-		lay.colWidths[i] = w
+		ws[i] = w
 	}
-
-	gutter := t.gutter
-	if nc > 0 {
-		sum := 0
-		for _, w := range lay.colWidths {
-			sum += w
-		}
-		if nc > 1 {
-			sum += gutter * (nc - 1)
-		}
-		lay.contentW = sum
-	}
-	if lay.hasTitle {
-		if tw := runeLen(t.title); tw > lay.contentW {
-			lay.contentW = tw
-		}
-	}
-	return lay
+	return ws
 }
 
-func runeLen(s string) int {
-	return utf8.RuneCountInString(s)
-}
+func runeLen(s string) int { return utf8.RuneCountInString(s) }
 
 func truncateRunes(s string, max int) string {
 	if max <= 0 {
@@ -175,148 +130,4 @@ func truncateRunes(s string, max int) string {
 		return "…"
 	}
 	return string(rs[:max-1]) + "…"
-}
-
-func mergeCellStyle(cell, row tcell.Style) tcell.Style {
-	if cell != (tcell.Style{}) {
-		return cell
-	}
-	return row
-}
-
-func (t *Table) paintContentRunes(
-	c Canvas,
-	wy int,
-	originX int,
-	windowW int,
-	lay tableLayout,
-	cells []TableCell,
-	dataRow int,
-	ps TablePaintState,
-) {
-	if windowW <= 0 {
-		return
-	}
-	rowStyle := ps.rowStyle(dataRow, t.rowStyle)
-	gutter := t.gutter
-	xContent := 0
-	for col := 0; col < len(lay.colWidths); col++ {
-		if col > 0 {
-			for g := 0; g < gutter; g++ {
-				if xContent >= originX && xContent < originX+windowW {
-					c.SetContent(xContent-originX, wy, ' ', rowStyle)
-				}
-				xContent++
-			}
-		}
-		cw := lay.colWidths[col]
-		text := ""
-		st := rowStyle
-		if col < len(cells) {
-			text = truncateRunes(cells[col].Text, cw)
-			st = mergeCellStyle(cells[col].Style, rowStyle)
-		}
-		rs := []rune(text)
-		for i := 0; i < cw; i++ {
-			ch := ' '
-			if i < len(rs) {
-				ch = rs[i]
-			}
-			if xContent >= originX && xContent < originX+windowW {
-				c.SetContent(xContent-originX, wy, ch, ps.cellStyle(dataRow, col, i, st))
-			}
-			xContent++
-		}
-	}
-}
-
-func (t *Table) paintTitle(c Canvas, lay tableLayout, wy, originX, windowW int) {
-	if !lay.hasTitle || windowW <= 0 {
-		return
-	}
-	rs := []rune(t.title)
-	for wx := 0; wx < windowW; wx++ {
-		cx := originX + wx
-		ch := ' '
-		if cx >= 0 && cx < len(rs) {
-			ch = rs[cx]
-		}
-		c.SetContent(wx, wy, ch, t.titleStyle)
-	}
-}
-
-func (t *Table) paintHeader(c Canvas, lay tableLayout, wy, originX, windowW int) {
-	if !lay.hasHeader {
-		return
-	}
-	cells := make([]TableCell, len(t.columns))
-	for i, col := range t.columns {
-		cells[i] = TableCell{Text: col.Name}
-	}
-	t.paintContentRunes(c, wy, originX, windowW, lay, cells, -1, TablePaintState{RowStyle: func(int) tcell.Style { return t.headerStyle }})
-}
-
-// PaintVisible renders the visible slice straight into c, clipped to
-// windowW x windowH. Canvas.SetContent clips to the screen, not the pane, so
-// every write below stays inside those bounds.
-func (t *Table) PaintVisible(c Canvas, rv *RectViewport, windowW, windowH int, ps TablePaintState) {
-	if rv == nil {
-		return
-	}
-	for y := 0; y < windowH; y++ {
-		for x := 0; x < windowW; x++ {
-			c.SetContent(x, y, ' ', tcell.StyleDefault)
-		}
-	}
-
-	lay := t.Layout()
-	dataH := windowH - lay.stickyRows
-	if dataH < 0 {
-		dataH = 0
-	}
-
-	rv.SetContentSize(lay.contentW, lay.dataRows)
-	rv.Clamp(windowW, dataH)
-
-	wy := 0
-	if lay.hasTitle {
-		if wy < windowH {
-			t.paintTitle(c, lay, wy, rv.Origin.X, windowW)
-		}
-		wy++
-	}
-	if lay.hasHeader {
-		if wy < windowH {
-			t.paintHeader(c, lay, wy, rv.Origin.X, windowW)
-		}
-		wy++
-	}
-
-	for row := rv.Origin.Y; row < lay.dataRows && wy < windowH; row++ {
-		var cells []TableCell
-		if row >= 0 && row < len(t.rows) {
-			cells = t.rows[row]
-		}
-		t.paintContentRunes(c, wy, rv.Origin.X, windowW, lay, cells, row, ps)
-		wy++
-	}
-	for ; wy < windowH; wy++ {
-		for x := 0; x < windowW; x++ {
-			c.SetContent(x, wy, ' ', t.rowStyle)
-		}
-	}
-}
-
-// PaintVisibleDefault paints with no row styling or search highlights.
-func (t *Table) PaintVisibleDefault(c Canvas, rv *RectViewport, windowW, windowH int) {
-	t.PaintVisible(c, rv, windowW, windowH, TablePaintState{})
-}
-
-func (t *Table) ContentOverflows(windowW, windowH int) bool {
-	lay := t.Layout()
-	dataH := windowH - lay.stickyRows
-	if dataH < 0 {
-		dataH = 0
-	}
-	return lay.contentW > windowW || lay.dataRows > dataH
 }

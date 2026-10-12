@@ -66,13 +66,21 @@ func TestTableWidgetSearchJump(t *testing.T) {
 	}
 }
 
-func TestRebuildTableSearchHits(t *testing.T) {
-	tbl := NewTable()
-	tbl.SetShowHeader(false)
-	tbl.AddColumn("T")
-	tbl.AddRow("hello loopy")
-	hits := RebuildTableSearch(tbl, "lo")
-	if len(hits) != 2 {
-		t.Fatalf("hits=%d want 2", len(hits))
+func TestTableWidgetSearchHighlight(t *testing.T) {
+	w := NewTableWidget(platform.NewAppContext())
+	w.Table().AddColumn("T")
+	w.SetFill(func(t *Table) { t.AddRow("hello loopy") })
+	w.SetSearchColor(tcell.ColorYellow)
+	w.SetSearchPattern("lo")
+
+	g := NewGrid(12, 1)
+	w.Draw(NewCanvas(g).WithRect(NewRect(0, 0, 12, 1)))
+
+	_, bg, _ := g.Cells[3][0].Style.Decompose() // "hello": l at 2,3 -> "lo" at 3..5
+	if bg != tcell.ColorYellow {
+		t.Fatalf("match bg=%v want yellow", bg)
+	}
+	if _, bg, _ = g.Cells[0][0].Style.Decompose(); bg == tcell.ColorYellow {
+		t.Fatal("non-match highlighted")
 	}
 }

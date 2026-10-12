@@ -221,23 +221,22 @@ Implementation: `viewport.go` (`Draw`, `ANSI` field), `utf.go` (`DrawANSIText`).
 Tabular list panes do **not** use `platform.Buffer` / `Viewport`. Paint stack:
 
 ```text
-SetFill(model) → Table layout → RectViewport (origin) → Canvas → Grid
+SetFill(model) → Table (data) → TableWidget.Draw → Canvas → Grid
 ```
 
 | Piece | Role |
 |-------|------|
-| `Table` | Columns, rows, auto column width, sticky title/header |
-| `RectViewport` | Pan when contentW/contentH exceeds pane; `EnsureRowVisible` scrolls Y only |
-| `TablePaintState` | `RowStyleFunc` + `/search` highlight spans |
+| `Table` | Plain data: columns, rows, title/header flags |
+| `TableWidget` | Selection, pan, `/search`; `Draw` lays out columns and paints the visible rows |
 
-`Table.PaintVisible` writes the visible slice straight to the `Canvas` with no
+`TableWidget.Draw` writes the visible slice straight to the `Canvas` with no
 intermediate buffer. `Canvas.SetContent` clips to the screen rather than the
-pane, so `PaintVisible` bounds every write to the `windowW`/`windowH` it was
-given — a title or header must not paint into a pane too short to hold it.
+pane, so every write is bounded to the pane's width and height — a title or
+header must not paint into a pane too short to hold it.
 
 Row colors (selection, markers, gutter) come from the application widget's `SetRowStyleFunc`, not embedded `\x1b` sequences.
 
-Implementation: `table.go`, `table_widget.go`, `table_paint.go`. Applications supply the row model and style callbacks.
+Implementation: `table.go`, `table_widget.go`. Applications supply the row model and style callbacks.
 
 ---
 

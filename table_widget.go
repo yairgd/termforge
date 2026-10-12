@@ -1,6 +1,7 @@
 package termforge
 
 import (
+	"strings"
 	"time"
 
 	tcell "github.com/gdamore/tcell/v2"
@@ -10,40 +11,40 @@ import (
 // TableFillFunc repopulates table rows at Draw time (e.g. from external model data).
 type TableFillFunc func(t *Table)
 
-// TableWidget is a columnar table view with RectViewport panning, row selection,
-// /search, copy, and mouse hit-testing.
+type cellRef struct{ row, col int }
+
+// TableWidget is a columnar table view: row selection, horizontal pan, /search,
+// double-click copy. Draw does all the layout and painting.
 type TableWidget struct {
 	BaseWidget
-	table *Table
-	rv    *RectViewport
-	fill  TableFillFunc
+	table      *Table
+	fill       TableFillFunc
+	rowStyleFn func(row int) tcell.Style
 
 	selectedRow int
-	rowStyleFn  func(row int) tcell.Style
+	top         int // first visible data row
+	panX        int // first visible content column
 
 	searchPattern   string
 	searchCommitted string
 	searchColor     tcell.Color
-	searchHits      []TableSearchHit
+	selectColor     tcell.Color
 	onSearchJump    func(row int)
 
-	clipboard ClipboardIO
-
-	screenX int
-	screenY int
-
-	lastW int
-	lastH int
-
-	selectColor tcell.Color
-
-	cellSel         *TableSearchHit
+	clipboard       ClipboardIO
+	cellSel         *cellRef
 	cellSelText     string
 	suppressCellClk bool
 	clickCount      int
 	lastClickTime   time.Time
 	lastClickRow    int
 	lastClickCol    int
+
+	// set by Draw, used by hit-testing and paging
+	screenX, screenY int
+	lastW, lastH     int
+	colW             []int
+	contentW         int
 }
 
 var (
@@ -57,7 +58,6 @@ func NewTableWidget(ctx platform.AppContext) *TableWidget {
 	return &TableWidget{
 		BaseWidget:  NewBaseWidget(ctx),
 		table:       NewTable(),
-		rv:          NewRectViewport(),
 		selectColor: tcell.ColorDarkSlateBlue,
 	}
 }
@@ -66,61 +66,110 @@ func (w *TableWidget) Table() *Table { return w.table }
 
 func (w *TableWidget) SetFill(fn TableFillFunc) { w.fill = fn }
 
-// ResetHorizontalPan scrolls back to the leftmost column, leaving the vertical
-// position alone. Call it when the row model is replaced.
-func (w *TableWidget) ResetHorizontalPan() { w.rv.Origin.X = 0 }
-
-// HorizontalPan is the first content column drawn at the pane's left edge.
-func (w *TableWidget) HorizontalPan() int { return w.rv.Origin.X }
-
 func (w *TableWidget) SetRowStyleFunc(fn func(row int) tcell.Style) { w.rowStyleFn = fn }
 
 func (w *TableWidget) SetOnSearchJump(fn func(row int)) { w.onSearchJump = fn }
 
+func (w *TableWidget) SetClipboard(io ClipboardIO) { w.clipboard = io }
+
 func (w *TableWidget) SelectedRow() int { return w.selectedRow }
 
-func (w *TableWidget) PanLeft()  { w.pan(-1, 0) }
-func (w *TableWidget) PanRight() { w.pan(1, 0) }
-
-func (w *TableWidget) clampSelected() {
-	n := w.table.NumRows()
-	if n == 0 {
-		w.selectedRow = 0
-		return
+// refill reruns the fill callback so row counts are current.
+func (w *TableWidget) refill() {
+	if w.fill != nil {
+		w.table.ClearRows()
+		w.fill(w.table)
 	}
-	if w.selectedRow < 0 {
-		w.selectedRow = 0
-	}
-	if w.selectedRow >= n {
-		w.selectedRow = n - 1
-	}
+	w.clampSelected()
 }
 
-// InitPanKeyBindings wires Up/Down/Left/Right (and page/home/end) for pan-only
-// demos. List panes override with selection-aware bindings.
-func (w *TableWidget) InitPanKeyBindings() {
-	w.BindKeyFunc("scroll-up", func(args ...any) { w.pan(0, -1) }, "<Up>", "k")
-	w.BindKeyFunc("scroll-down", func(args ...any) { w.pan(0, 1) }, "<Down>", "j")
-	w.BindKeyFunc("scroll-left", func(args ...any) { w.pan(-1, 0) }, "<Left>", "h")
-	w.BindKeyFunc("scroll-right", func(args ...any) { w.pan(1, 0) }, "<Right>", "l")
-	w.BindKeyFunc("page-up", func(args ...any) { w.pan(0, -w.PageRows()) }, "<PgUp>", "<C-b>")
-	w.BindKeyFunc("page-down", func(args ...any) { w.pan(0, w.PageRows()) }, "<PgDn>", "<C-f>")
-	w.BindKeyFunc("home", func(args ...any) { w.scrollHome() }, "<Home>", "g")
-	w.BindKeyFunc("end", func(args ...any) { w.scrollEnd() }, "<End>", "G")
+func (w *TableWidget) clampSelected() {
+	w.selectedRow = clampInt(w.selectedRow, 0, max(w.table.NumRows()-1, 0))
+}
+
+// ---- view geometry ----
+
+// stickyRows is the title + header rows pinned above the data.
+func (w *TableWidget) stickyRows() int {
+	n := 0
+	if w.hasTitle() {
+		n++
+	}
+	if w.hasHeader() {
+		n++
+	}
+	return n
+}
+
+func (w *TableWidget) hasTitle() bool  { return w.table.showTitle && w.table.title != "" }
+func (w *TableWidget) hasHeader() bool { return w.table.showHeader && w.table.NumCols() > 0 }
+
+func (w *TableWidget) dataH() int { return max(w.lastH-w.stickyRows(), 0) }
+
+func (w *TableWidget) PageRows() int {
+	if h := w.dataH(); h >= 1 {
+		return h
+	}
+	return 10
+}
+
+func (w *TableWidget) clampView() {
+	w.top = clampInt(w.top, 0, max(w.table.NumRows()-w.dataH(), 0))
+	w.panX = clampInt(w.panX, 0, max(w.contentW-w.lastW, 0))
+}
+
+// HorizontalPan is the first content column drawn at the pane's left edge.
+func (w *TableWidget) HorizontalPan() int { return w.panX }
+
+// ResetHorizontalPan scrolls back to the leftmost column. Call it when the row
+// model is replaced.
+func (w *TableWidget) ResetHorizontalPan() { w.panX = 0 }
+
+func (w *TableWidget) PanLeft()  { w.pan(-1) }
+func (w *TableWidget) PanRight() { w.pan(1) }
+
+func (w *TableWidget) pan(dx int) {
+	w.panX += dx
+	w.clampView()
+}
+
+// ---- selection ----
+
+func (w *TableWidget) SetSelectedRow(row int) {
+	w.refill()
+	w.selectedRow = row
+	w.clampSelected()
+}
+
+func (w *TableWidget) MoveSelection(delta int) {
+	w.refill()
+	n := w.table.NumRows()
+	if n == 0 {
+		return
+	}
+	w.selectedRow = (w.selectedRow + delta%n + n) % n
+	w.EnsureRowVisible()
+}
+
+func (w *TableWidget) EnsureRowVisible() {
+	h := w.dataH()
+	if w.selectedRow < w.top {
+		w.top = w.selectedRow
+	}
+	if h > 0 && w.selectedRow >= w.top+h {
+		w.top = w.selectedRow - h + 1
+	}
+	w.clampView()
 }
 
 // InitSelectionKeyBindings wires Up/Down for row selection and Left/Right for pan.
 func (w *TableWidget) InitSelectionKeyBindings() {
 	w.BindKeyFunc("up", func(args ...any) { w.MoveSelection(-1) }, "<Up>", "k")
 	w.BindKeyFunc("down", func(args ...any) { w.MoveSelection(1) }, "<Down>", "j")
-	w.BindKeyFunc("scroll-left", func(args ...any) { w.pan(-1, 0) }, "<Left>", "h")
-	w.BindKeyFunc("scroll-right", func(args ...any) { w.pan(1, 0) }, "<Right>", "l")
-	w.BindKeyFunc("page-up", func(args ...any) {
-		w.MoveSelection(-w.PageRows())
-	}, "<PgUp>", "<C-b>")
-	w.BindKeyFunc("page-down", func(args ...any) {
-		w.MoveSelection(w.PageRows())
-	}, "<PgDn>", "<C-f>")
+	w.BindKeyFunc("scroll-left", func(args ...any) { w.pan(-1) }, "<Left>", "h")
+	w.BindKeyFunc("scroll-right", func(args ...any) { w.pan(1) }, "<Right>", "l")
+	w.BindKeyFunc("page-up", func(args ...any) { w.MoveSelection(-w.PageRows()) }, "<PgUp>", "<C-b>")
+	w.BindKeyFunc("page-down", func(args ...any) { w.MoveSelection(w.PageRows()) }, "<PgDn>", "<C-f>")
 	w.BindKeyFunc("home", func(args ...any) { w.SetSelectedRow(0); w.EnsureRowVisible() }, "<Home>", "g")
 	w.BindKeyFunc("end", func(args ...any) {
 		w.SetSelectedRow(w.table.NumRows() - 1)
@@ -128,96 +177,9 @@ func (w *TableWidget) InitSelectionKeyBindings() {
 	}, "<End>", "G")
 }
 
-func (w *TableWidget) MoveSelection(delta int) {
-	w.syncFill()
-	n := w.table.NumRows()
-	if n == 0 {
-		return
-	}
-	w.selectedRow = (w.selectedRow + delta%n + n) % n
-	w.ensureRowVisible()
-}
+// ---- events ----
 
-func (w *TableWidget) EnsureRowVisible() {
-	w.syncFill()
-	dataH := w.dataViewportH(w.lastH)
-	w.rv.EnsureRowVisible(w.selectedRow, dataH)
-	w.clampView()
-}
-
-func (w *TableWidget) ensureRowVisible() { w.EnsureRowVisible() }
-
-func (w *TableWidget) SetSelectedRow(row int) {
-	w.syncFill()
-	w.selectedRow = row
-	w.clampSelected()
-}
-
-func (w *TableWidget) PageRows() int {
-	h := w.dataViewportH(w.lastH)
-	if h < 1 {
-		return 10
-	}
-	return h
-}
-
-func (w *TableWidget) dataViewportH(windowH int) int {
-	if windowH <= 0 {
-		return 0
-	}
-	lay := w.table.Layout()
-	h := windowH - lay.stickyRows
-	if h < 0 {
-		return 0
-	}
-	return h
-}
-
-func (w *TableWidget) pan(dx, dy int) {
-	w.rv.Pan(dx, dy)
-	w.clampView()
-}
-
-func (w *TableWidget) scrollHome() {
-	w.rv.ScrollHome()
-	w.clampView()
-}
-
-func (w *TableWidget) scrollEnd() {
-	w.rv.ScrollEnd(w.dataViewportH(w.lastH))
-	w.clampView()
-}
-
-func (w *TableWidget) clampView() {
-	w.rv.Clamp(w.lastW, w.dataViewportH(w.lastH))
-}
-
-func (w *TableWidget) syncFill() {
-	if w.fill != nil {
-		w.table.ClearRows()
-		w.fill(w.table)
-		w.clampSelected()
-	}
-	if w.searchPattern != "" {
-		w.searchHits = RebuildTableSearch(w.table, w.searchPattern)
-	} else {
-		w.searchHits = nil
-	}
-}
-
-func (w *TableWidget) paintState() TablePaintState {
-	return TablePaintState{
-		RowStyle:    w.rowStyleFn,
-		SearchColor: w.searchColor,
-		SearchHits:  w.searchHits,
-		SelectHit:   w.cellSel,
-		SelectColor: w.selectColor,
-	}
-}
-
-func (w *TableWidget) HandleFocusKey(ev *tcell.EventKey) bool {
-	return w.HandleBoundKey(ev)
-}
+func (w *TableWidget) HandleFocusKey(ev *tcell.EventKey) bool { return w.HandleBoundKey(ev) }
 
 func (w *TableWidget) HandleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
@@ -233,21 +195,50 @@ func (w *TableWidget) handleMouse(e *tcell.EventMouse) {
 		return
 	}
 	btns := e.Buttons()
-	if btns&tcell.WheelUp != 0 {
+	switch {
+	case btns&tcell.WheelUp != 0:
 		w.MoveSelection(-1)
-		return
-	}
-	if btns&tcell.WheelDown != 0 {
+	case btns&tcell.WheelDown != 0:
 		w.MoveSelection(1)
-		return
-	}
-	mx, my := e.Position()
-	row, onRow := w.HitDataRow(mx, my)
-	if btns&tcell.ButtonPrimary != 0 {
-		if onRow {
+	case btns&tcell.ButtonPrimary != 0:
+		if row, ok := w.HitDataRow(e.Position()); ok {
 			w.SetSelectedRow(row)
 		}
 	}
+}
+
+// HitDataRow maps screen coordinates to a data row index.
+func (w *TableWidget) HitDataRow(mx, my int) (row int, onRow bool) {
+	lx, ly := mx-w.screenX, my-w.screenY
+	if lx < 0 || lx >= w.lastW || ly < w.stickyRows() || ly >= w.lastH {
+		return -1, false
+	}
+	row = w.top + ly - w.stickyRows()
+	if row >= w.table.NumRows() {
+		return -1, false
+	}
+	return row, true
+}
+
+// HitCell maps screen coordinates to a data row, column, and rune offset within
+// that column's visible (possibly truncated) cell width.
+func (w *TableWidget) HitCell(mx, my int) (row, col, runeOff int, ok bool) {
+	row, onRow := w.HitDataRow(mx, my)
+	if !onRow {
+		return -1, -1, 0, false
+	}
+	contentX := mx - w.screenX + w.panX
+	x := 0
+	for c, cw := range w.colW {
+		if c > 0 {
+			x += w.table.gutter
+		}
+		if contentX >= x && contentX < x+cw {
+			return row, c, contentX - x, true
+		}
+		x += cw
+	}
+	return row, -1, 0, false
 }
 
 // TryDoubleClickWord handles double-click on a cell: highlight the full cell
@@ -268,8 +259,7 @@ func (w *TableWidget) TryDoubleClickWord(e *tcell.EventMouse) bool {
 	if btns&tcell.ButtonPrimary == 0 {
 		return false
 	}
-	mx, my := e.Position()
-	row, col, _, ok := w.HitCell(mx, my)
+	row, col, _, ok := w.HitCell(e.Position())
 	if !ok {
 		w.ClearCellSelection()
 		return false
@@ -277,11 +267,10 @@ func (w *TableWidget) TryDoubleClickWord(e *tcell.EventMouse) bool {
 	w.noteCellClick(row, col, e.When())
 	if w.clickCount == 2 {
 		text := w.table.CellText(row, col)
-		rs := []rune(text)
-		if len(rs) == 0 {
+		if text == "" {
 			return false
 		}
-		w.cellSel = &TableSearchHit{Row: row, Col: col, Start: 0, End: len(rs)}
+		w.cellSel = &cellRef{row, col}
 		w.cellSelText = text
 		w.clipboard.copyText(text)
 		w.SetSelectedRow(row)
@@ -305,9 +294,7 @@ func (w *TableWidget) noteCellClick(row, col int, when time.Time) {
 	} else {
 		w.clickCount = 1
 	}
-	w.lastClickTime = when
-	w.lastClickRow = row
-	w.lastClickCol = col
+	w.lastClickTime, w.lastClickRow, w.lastClickCol = when, row, col
 }
 
 // ClearCellSelection drops the highlighted cell text (e.g. before a new single click).
@@ -316,42 +303,12 @@ func (w *TableWidget) ClearCellSelection() {
 	w.cellSelText = ""
 }
 
-// HitDataRow maps screen coordinates to a data row index.
-func (w *TableWidget) HitDataRow(mx, my int) (row int, onRow bool) {
-	w.syncFill()
-	lx := mx - w.screenX
-	ly := my - w.screenY
-	if lx < 0 || ly < 0 || lx >= w.lastW || ly >= w.lastH {
-		return -1, false
-	}
-	lay := w.table.Layout()
-	if ly < lay.stickyRows {
-		return -1, false
-	}
-	rel := ly - lay.stickyRows
-	dataH := w.dataViewportH(w.lastH)
-	if rel >= dataH {
-		return -1, false
-	}
-	dr := w.rv.Origin.Y + rel
-	if dr < 0 || dr >= w.table.NumRows() {
-		return -1, false
-	}
-	return dr, true
-}
-
-func (w *TableWidget) SetClipboard(io ClipboardIO) { w.clipboard = io }
+// ---- copy ----
 
 func (w *TableWidget) CopySelection() {
-	if w.clipboard.Copy == nil {
-		return
+	if w.clipboard.Copy != nil {
+		w.clipboard.copyText(w.SelectedText())
 	}
-	if w.cellSelText != "" {
-		w.clipboard.copyText(w.cellSelText)
-		return
-	}
-	text := w.table.RowDisplayLine(w.selectedRow)
-	w.clipboard.copyText(text)
 }
 
 func (w *TableWidget) SelectedText() string {
@@ -363,22 +320,203 @@ func (w *TableWidget) SelectedText() string {
 
 func (w *TableWidget) HasSelection() bool { return w.cellSel != nil }
 
+// ---- search ----
+
+func (w *TableWidget) SetSearchColor(c tcell.Color) { w.searchColor = c }
+
+func (w *TableWidget) SetSearchPattern(pattern string) { w.searchPattern = pattern }
+
+func (w *TableWidget) RevertSearch() { w.searchPattern = w.searchCommitted }
+
+func (w *TableWidget) SearchPattern() string { return w.searchPattern }
+
+func (w *TableWidget) CommitSearch(pattern string) {
+	w.searchPattern = pattern
+	w.searchCommitted = pattern
+	if pattern == "" {
+		return
+	}
+	if w.rowMatches(w.selectedRow) {
+		w.jumpToSearchRow(w.selectedRow)
+		return
+	}
+	w.SearchNext()
+}
+
+func (w *TableWidget) SearchNext() bool { return w.searchStep(1) }
+func (w *TableWidget) SearchPrev() bool { return w.searchStep(-1) }
+
+// searchStep selects the next row (wrapping) after the selection, in direction dir, that matches.
+func (w *TableWidget) searchStep(dir int) bool {
+	n := w.table.NumRows()
+	if n == 0 || w.searchPattern == "" {
+		return false
+	}
+	for i := 1; i <= n; i++ {
+		row := ((w.selectedRow+dir*i)%n + n) % n
+		if w.rowMatches(row) {
+			w.jumpToSearchRow(row)
+			return true
+		}
+	}
+	return false
+}
+
+func (w *TableWidget) jumpToSearchRow(row int) {
+	w.SetSelectedRow(row)
+	w.EnsureRowVisible()
+	if w.onSearchJump != nil {
+		w.onSearchJump(row)
+	}
+}
+
+func (w *TableWidget) rowMatches(row int) bool {
+	if w.searchPattern == "" || row < 0 || row >= w.table.NumRows() {
+		return false
+	}
+	pat := strings.ToLower(w.searchPattern)
+	for _, c := range w.table.rows[row] {
+		if strings.Contains(strings.ToLower(c.Text), pat) {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *TableWidget) CursorInSearchMatch() bool { return w.rowMatches(w.selectedRow) }
+
+func (w *TableWidget) WordAtCursor() string {
+	if w.selectedRow >= w.table.NumRows() {
+		return ""
+	}
+	return identAtOrNear(w.table.RowDisplayLine(w.selectedRow), 0)
+}
+
+// matchSpans returns the [start,end) rune ranges of text matching the search pattern.
+func (w *TableWidget) matchSpans(text string) [][2]int {
+	if w.searchPattern == "" || text == "" {
+		return nil
+	}
+	rs := []rune(strings.ToLower(text))
+	pat := []rune(strings.ToLower(w.searchPattern))
+	var spans [][2]int
+	for i := 0; i+len(pat) <= len(rs); i++ {
+		if string(rs[i:i+len(pat)]) == string(pat) {
+			spans = append(spans, [2]int{i, i + len(pat)})
+		}
+	}
+	return spans
+}
+
+// ---- draw ----
+
 func (w *TableWidget) Draw(c Canvas) {
-	dx := 0
-	dy := 0
-	w.syncFill()
-	w.lastW = c.W()
-	w.lastH = c.H()
-	w.screenX = c.ScreenX(0)
-	w.screenY = c.ScreenY(0)
-	//	w.rv.SetOrigin(2, 2)
+	w.refill()
+	w.lastW, w.lastH = c.W(), c.H()
+	w.screenX, w.screenY = c.ScreenX(0), c.ScreenY(0)
 
-	inner := c.WithRect(c.ChildRect(dx, dy, c.W()-dx, c.H()-dy))
-	//	w.lastW, w.lastH = inner.W(), inner.H()
-	//	w.screenX, w.screenY = inner.ScreenX(0), inner.ScreenY(0)
-	w.table.PaintVisible(inner, w.rv, w.lastW, w.lastH, w.paintState())
+	t := w.table
+	w.colW = t.colWidths()
+	w.contentW = 0
+	for _, cw := range w.colW {
+		w.contentW += cw
+	}
+	if n := len(w.colW); n > 1 {
+		w.contentW += t.gutter * (n - 1)
+	}
+	if w.hasTitle() {
+		w.contentW = max(w.contentW, runeLen(t.title))
+	}
+	w.clampView()
 
-	// w.table.PaintVisible(c, w.rv, w.lastW, w.lastH, w.paintState())
+	for y := 0; y < w.lastH; y++ {
+		for x := 0; x < w.lastW; x++ {
+			c.SetContent(x, y, ' ', tcell.StyleDefault)
+		}
+	}
+
+	y := 0
+	if w.hasTitle() {
+		w.drawRow(c, y, -1, []TableCell{{Text: t.title}}, tcell.StyleDefault.Bold(true), []int{runeLen(t.title)})
+		y++
+	}
+	if w.hasHeader() {
+		head := make([]TableCell, len(t.columns))
+		for i, col := range t.columns {
+			head[i].Text = col.Name
+		}
+		w.drawRow(c, y, -1, head, tcell.StyleDefault.Bold(true), w.colW)
+		y++
+	}
+	for row := w.top; row < t.NumRows() && y < w.lastH; row, y = row+1, y+1 {
+		base := tcell.StyleDefault
+		if w.rowStyleFn != nil {
+			base = w.rowStyleFn(row)
+		}
+		w.drawRow(c, y, row, t.rows[row], base, w.colW)
+	}
+}
+
+// drawRow paints one line at window row y. row < 0 is the title/header
+// (no search or selection highlight). widths are the cell widths; gutters sit between them.
+func (w *TableWidget) drawRow(c Canvas, y, row int, cells []TableCell, base tcell.Style, widths []int) {
+	put := func(cx int, ch rune, st tcell.Style) {
+		if sx := cx - w.panX; sx >= 0 && sx < w.lastW {
+			c.SetContent(sx, y, ch, st)
+		}
+	}
+	x := 0
+	for col, cw := range widths {
+		if col > 0 {
+			for g := 0; g < w.table.gutter; g++ {
+				put(x, ' ', base)
+				x++
+			}
+		}
+		if x+cw <= w.panX || x-w.panX >= w.lastW {
+			x += cw
+			continue
+		}
+		st, full := base, ""
+		if col < len(cells) {
+			full = cells[col].Text
+			if cells[col].Style != (tcell.Style{}) {
+				st = cells[col].Style
+			}
+		}
+		rs := []rune(truncateRunes(full, cw))
+		var spans [][2]int
+		selected := false
+		if row >= 0 {
+			spans = w.matchSpans(full)
+			selected = w.cellSel != nil && w.cellSel.row == row && w.cellSel.col == col
+		}
+		for i := 0; i < cw; i++ {
+			ch := ' '
+			if i < len(rs) {
+				ch = rs[i]
+			}
+			s := st
+			if selected && i < len(rs) {
+				s = highlight(s, w.selectColor)
+			}
+			for _, sp := range spans {
+				if i >= sp[0] && i < sp[1] {
+					s = highlight(s, w.searchColor)
+					break
+				}
+			}
+			put(x+i, ch, s)
+		}
+		x += cw
+	}
+}
+
+func highlight(st tcell.Style, bg tcell.Color) tcell.Style {
+	if bg == tcell.ColorDefault {
+		return st
+	}
+	return st.Background(bg).Foreground(platform.ContrastColor(bg))
 }
 
 func (w *TableWidget) DrawStatusLine(c Canvas, active bool) {
