@@ -95,7 +95,7 @@ func (l *WidgetsList) BuildLayout(c Canvas) {
 
 func (l *WidgetsList) Draw(c Canvas) {
 	for _, n := range l.widgets {
-		n.widget.Draw(Canvas{rect: n.rect, grid: c.grid})
+		n.widget.Draw(c.WithRect(n.rect))
 	}
 }
 

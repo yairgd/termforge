@@ -8,7 +8,14 @@ import (
 
 type Canvas struct {
 	rect Rect
-	grid *Grid
+	// clip is the visible screen area (rect ∩ every parent's clip); writes
+	// outside it are dropped. Unused until hasClip, so a bare Canvas{rect, grid}
+	// keeps clipping to the screen only.
+	clip    Rect
+	hasClip bool
+	grid    *Grid
+	// origin is the content cell drawn at local (0,0); pan by changing it.
+	origin Point
 }
 
 func NewCanvas(g *Grid) *Canvas {
@@ -21,20 +28,38 @@ func (c Canvas) Rect() Rect { return c.rect }
 func (c Canvas) W() int     { return c.rect.w }
 func (c Canvas) H() int     { return c.rect.h }
 
-func (c Canvas) ScreenX(x int) int { return c.rect.x + x }
-func (c Canvas) ScreenY(y int) int { return c.rect.y + y }
+func (c Canvas) ScreenX(x int) int { return c.rect.x + x - c.origin.X }
+func (c Canvas) ScreenY(y int) int { return c.rect.y + y - c.origin.Y }
 
 func (c Canvas) ChildRect(x, y, w, h int) Rect {
 	return NewRect(
-		c.rect.x+x,
-		c.rect.y+y,
+		c.ScreenX(x),
+		c.ScreenY(y),
 		w,
 		h,
 	)
 }
 
+// WithRect returns a child canvas on r, clipped to this canvas's visible area.
+// The child starts with a zero origin.
 func (c Canvas) WithRect(r Rect) Canvas {
-	return Canvas{rect: r, grid: c.grid}
+	clip := r
+	if c.hasClip {
+		clip = intersectRect(c.clip, r)
+	}
+	return Canvas{rect: r, clip: clip, hasClip: true, grid: c.grid}
+}
+
+// WithOrigin returns a copy that draws content (x,y) at local (x-p.X, y-p.Y).
+func (c Canvas) WithOrigin(p Point) Canvas {
+	c.origin = p
+	return c
+}
+
+func intersectRect(a, b Rect) Rect {
+	x, y := max(a.x, b.x), max(a.y, b.y)
+	r, bt := min(a.Right(), b.Right()), min(a.Bottom(), b.Bottom())
+	return NewRect(x, y, max(r-x, 0), max(bt-y, 0))
 }
 
 func (c Canvas) SetContent(
@@ -43,12 +68,18 @@ func (c Canvas) SetContent(
 	ch rune,
 	style tcell.Style,
 ) {
-	c.grid.SetContent(
-		c.ScreenX(x),
-		c.ScreenY(y),
-		ch,
-		style,
-	)
+	sx, sy := c.ScreenX(x), c.ScreenY(y)
+	if c.hasClip && !c.clip.Contains(sx, sy) {
+		return
+	}
+	c.grid.SetContent(sx, sy, ch, style)
+}
+
+func (c Canvas) printClipped(x, y int, style tcell.Style, text string) {
+	for _, r := range text {
+		c.SetContent(x, y, r, style)
+		x++
+	}
 }
 
 func (c Canvas) Fill(
@@ -68,12 +99,7 @@ func (c Canvas) Print(
 	style tcell.Style,
 	args ...any,
 ) {
-	c.grid.Print(
-		c.ScreenX(x),
-		c.ScreenY(y),
-		style,
-		fmt.Sprint(args...),
-	)
+	c.printClipped(x, y, style, fmt.Sprint(args...))
 }
 
 func (c Canvas) Printf(
@@ -83,12 +109,7 @@ func (c Canvas) Printf(
 	format string,
 	args ...any,
 ) {
-	c.grid.Print(
-		c.ScreenX(x),
-		c.ScreenY(y),
-		style,
-		fmt.Sprintf(format, args...),
-	)
+	c.printClipped(x, y, style, fmt.Sprintf(format, args...))
 }
 
 func (c Canvas) DrawVerticalLocal(
