@@ -166,6 +166,9 @@ func (s *Sheet) HandleEvent(ev tcell.Event) {
 	case *tcell.EventMouse:
 		s.handleMouse(e)
 	case *tcell.EventKey:
+		if s.scrollKey(e) {
+			return
+		}
 		if s.shown(s.active) {
 			s.parts[s.active].Widget.HandleEvent(ev)
 		}
@@ -210,6 +213,9 @@ func (s *Sheet) HandleFocusKey(ev *tcell.EventKey) bool {
 		s.follow()
 		return true
 	}
+	if s.scrollKey(ev) {
+		return true
+	}
 	ok := false
 	if s.shown(s.active) {
 		if h, is := s.parts[s.active].Widget.(FocusKeyHandler); is {
@@ -218,6 +224,24 @@ func (s *Sheet) HandleFocusKey(ev *tcell.EventKey) bool {
 	}
 	s.follow()
 	return ok
+}
+
+// scrollKey scrolls the whole sheet on PgUp/PgDn/Home/End, whichever part has the keys.
+func (s *Sheet) scrollKey(ev *tcell.EventKey) bool {
+	page := max(s.paneH, 1)
+	switch ev.Key() {
+	case tcell.KeyPgUp:
+		s.ScrollBy(-page)
+	case tcell.KeyPgDn:
+		s.ScrollBy(page)
+	case tcell.KeyHome:
+		s.ScrollBy(-s.contentH)
+	case tcell.KeyEnd:
+		s.ScrollBy(s.contentH)
+	default:
+		return false
+	}
+	return true
 }
 
 func (s *Sheet) SetFocused(focused bool) {
