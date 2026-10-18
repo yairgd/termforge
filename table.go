@@ -58,9 +58,20 @@ func (t *Table) AddColumnWidth(name string, width int) int {
 }
 
 func (t *Table) NumCols() int { return len(t.columns) }
+
+// ColumnName is column i's header, or "" out of range.
+func (t *Table) ColumnName(i int) string {
+	if i < 0 || i >= len(t.columns) {
+		return ""
+	}
+	return t.columns[i].Name
+}
 func (t *Table) NumRows() int { return len(t.rows) }
 
 func (t *Table) ClearRows() { t.rows = t.rows[:0] }
+
+// ClearColumns drops the columns and the rows with them.
+func (t *Table) ClearColumns() { t.columns, t.rows = nil, nil }
 
 func (t *Table) AddRow(values ...string) {
 	cells := make([]TableCell, len(values))
