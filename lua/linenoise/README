@@ -1,0 +1,12 @@
+linenoise from https://github.com/antirez/linenoise
+commit a473823d74b93eab2ba83480df16ed37617493f2 (2026-05-01).
+Built through ../lua_all.c (not compiled on its own).
+
+Patched so it works on any fds (the Lua console PTY), never on the app's stdin/stdout:
+- enableRawMode: isatty(fd) instead of isatty(STDIN_FILENO)
+- getColumns: ioctl(ofd, ...) instead of ioctl(1, ...); 80 columns when unknown
+  (no ESC[6n query: the console emulator may not answer it, and the read would block)
+- linenoiseClearScreen: write(rawmode_output, ...) instead of STDOUT_FILENO
+- linenoiseEditStop: write(l->ofd, "\n") instead of printf
+- raw mode on/off with TCSADRAIN instead of TCSAFLUSH, so typed-ahead or pasted lines
+  are not dropped

@@ -90,12 +90,29 @@ static void tf_openlibs(lua_State *L)
 }
 #define luaL_openlibs(L) tf_openlibs(L)
 
-/* Line editing and history through the readline API (libedit). */
-#include <editline/readline.h>
-#define lua_initreadline(L) \
-	((void)L, rl_readline_name = "lua", rl_instream = tf_in, rl_outstream = tf_out)
-#define lua_readline(L, b, p)  ((void)L, ((b) = readline(p)) != NULL)
-#define lua_saveline(L, line)  ((void)L, add_history(line))
+/* Line editing and history: vendored linenoise (no system library), run on the console
+ * fds instead of stdin/stdout (see linenoise/README for the small patch). */
+#include <strings.h> /* strcasecmp, hidden by _XOPEN_SOURCE */
+#include "linenoise/linenoise.c"
+
+/* Ctrl-C at the prompt drops the line (and its history slot) instead of ending the REPL. */
+static char *tf_readline(const char *prompt)
+{
+	char *res;
+
+	fflush(tf_out);
+	for (;;) {
+		errno = 0;
+		res = linenoiseBlockingEdit(fileno(tf_in), fileno(tf_out), prompt);
+		if (res || errno != EAGAIN)
+			return res;
+		free(history[--history_len]);
+	}
+}
+
+#define lua_initreadline(L)    ((void)L)
+#define lua_readline(L, b, p)  ((void)L, ((b) = tf_readline(p)) != NULL)
+#define lua_saveline(L, line)  ((void)L, linenoiseHistoryAdd(line))
 #define lua_freeline(L, b)     ((void)L, free(b))
 
 /* lua.c installs a SIGINT handler; replacing Go's would be unsafe. Ctrl-C reaches

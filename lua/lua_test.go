@@ -73,6 +73,10 @@ func TestREPLPluginInterruptEOF(t *testing.T) {
 	waitFor("42")
 	send("print(tf.hello('x'))\r")
 	waitFor("hi x")
+	send("\x1b[A\r") // history: Up repeats the last line
+	waitFor("hi x")
+	send("junk\x03print(123+1)\r") // Ctrl-C drops the line, the REPL goes on
+	waitFor("124")
 	send("double('a')\r")
 	waitFor("number expected")
 	send("while true do end\r")

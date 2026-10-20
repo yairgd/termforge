@@ -15,7 +15,7 @@ needs to know it is C.
                                    PTY slave ─┘
                                        ▲  lua.Run(slave)
                           ┌────────────┴──────────────┐
-                          │ lua_main (C, one thread)   │   libedit: line editing, history
+                          │ lua_main (C, one thread)   │   linenoise: line editing, history
                           │   tf_trampoline (C)        │
                           └────────────┬──────────────┘
                                        ▼  //export tfCall
@@ -24,7 +24,7 @@ needs to know it is C.
 
 ## Opt-in build
 
-The package needs a C compiler and libedit, so it is behind the `lua` build tag and nothing
+The package needs a C compiler, so it is behind the `lua` build tag and nothing
 else in termforge depends on it. Without the tag it is an empty package, `go build ./...`
 needs no C toolchain, and projects that only use the framework are unaffected.
 
@@ -34,14 +34,16 @@ task run:lua     # run the demo with the Lua tab
 task test:lua    # vet + test including the Lua package
 ```
 
-An application that embeds Lua builds with `-tags lua` itself. libedit is
-`dev-libs/libedit` on Gentoo and `libedit-dev` on Debian/Ubuntu.
+An application that embeds Lua builds with `-tags lua` itself. No library has to be
+installed: Lua and the line editor are vendored and compiled in, and the binary links only
+libc and libm.
 
 ## Layout
 
 | Path | What |
 |------|------|
 | `lua/lua-5.4.6/` | Upstream sources, unmodified |
+| `lua/linenoise/` | [linenoise](https://github.com/antirez/linenoise) line editor (BSD), patched to run on the console fds (see its `README`) |
 | `lua/lua_all.c` | Builds them as one unit and sets the console hooks (print, readline, history, interrupt) |
 | `lua/plugin.c`, `lua/lua.go` | The cgo glue and the Go plugin API |
 | `lua/doc.go` | Package documentation, the only file built without the tag |
@@ -56,9 +58,9 @@ try another Lua version, add its directory next to `lua-5.4.6/`, change the incl
 `lua.Run(slave)` runs Lua's own REPL (`lua_main`) on the PTY slave and returns at EOF, on
 the calling goroutine, which it locks to its OS thread. The host opens the PTY with
 `ptyx.Open()` and attaches it with `CompositeTerminal.AttachTTY`, exactly as for any child
-program. Line editing and history come from libedit (the readline API), so they behave like
-the stock `lua` binary. Every `Run` must use the same slave path, because libedit keeps
-pointers to the console files.
+program. Line editing and history come from the vendored linenoise (arrows, Home/End,
+Ctrl-A/E/K/U/W, Up/Down history); Ctrl-C at the prompt drops the line. Every `Run` must use
+the same slave path, because the console files are opened once per process.
 
 Ctrl-C: a PTY has no foreground process to signal, so the host calls `lua.Interrupt()`. Lua
 stops at its next instruction with `interrupted!` and the REPL carries on. A Go function

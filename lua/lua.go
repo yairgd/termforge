@@ -4,7 +4,7 @@ package lua
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/lua-5.4.6/src -I${SRCDIR}/lua-5.4.6 -DLUA_USE_POSIX -DUSE_ORIGNAL_LUA_CODE
-#cgo LDFLAGS: -ledit -lm
+#cgo LDFLAGS: -lm
 #include <stdlib.h>
 #include "plugin.h"
 */

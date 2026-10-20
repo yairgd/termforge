@@ -4,9 +4,10 @@
 //
 // The interpreter sources are vendored under lua-5.4.6/ and built as one unit by
 // lua_all.c, unmodified; see that file for how to switch version. There is one Lua per
-// process (the console state is static C). Line editing and history come from libedit.
+// process (the console state is static C). Line editing and history come from the vendored
+// linenoise (linenoise/), so no system library is needed.
 //
-// The package is opt-in: it needs a C compiler and libedit, so everything here is behind
+// The package is opt-in: it needs a C compiler, so everything here is behind
 // the "lua" build tag (go build -tags lua). Without the tag the package is empty and the
 // rest of the module builds with no C dependency.
 package lua
