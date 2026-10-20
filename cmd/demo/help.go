@@ -26,7 +26,7 @@ var demoCommands = []demoCommand{
 	{"equal", ":equal", "Reset every split to an even ratio."},
 	{"clear", ":clear", "Clear the focused pane's contents."},
 	{"help", ":help [command]", "Open this window, or help for one command."},
-	{"quit", ":quit", "Close the pane; exit on this tab's last."},
+	{"quit", ":quit[!]", "Close pane, exit on last; ! exits now."},
 }
 
 func findCommand(name string) (demoCommand, bool) {
@@ -64,8 +64,9 @@ func helpOverview() []string {
 		"",
 		"Two tabs, each a split tree of its own, a ':' command line,",
 		"mouse-driven focus and resize, and this floating window. Everything",
-		"here is framework machinery; the demo only supplies panes, the two",
-		"tab layouts and a handful of commands.",
+		"here is framework machinery; the demo only supplies panes, the",
+		"tab layouts and a handful of commands. Built with -tags lua, a",
+		"third tab runs an embedded Lua console.",
 		"",
 		"COMMANDS",
 	}

@@ -54,6 +54,11 @@ func (a *DemoApp) InitKeyBindings() {
 		"<C-d>",
 	)
 
+	// Ctrl-D leaves the app from insert mode too (the Lua pane would take it as EOF).
+	a.insertKeys.Bind(
+		commands.NewCommand("quit", func(args ...any) { a.ForceQuit() }),
+		"<C-d>",
+	)
 	a.insertKeys.Bind(
 		commands.NewCommand("escape", func(args ...any) { a.onEscape() }),
 		"<Esc>",

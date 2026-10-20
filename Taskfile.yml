@@ -23,6 +23,24 @@ tasks:
       - mkdir -p {{.BIN_DIR}}
       - go build -o {{.BIN_DIR}}/demo ./cmd/demo
 
+  build:lua:
+    desc: Build everything with the optional Lua tab (needs a C compiler and libedit)
+    cmds:
+      - go build -tags lua ./...
+      - mkdir -p {{.BIN_DIR}}
+      - go build -tags lua -o {{.BIN_DIR}}/demo ./cmd/demo
+
+  run:lua:
+    desc: Run the demo with the Lua tab (needs a C compiler and libedit)
+    cmds:
+      - go run -tags lua ./cmd/demo
+
+  test:lua:
+    desc: Run all tests including the Lua package (needs a C compiler and libedit)
+    cmds:
+      - go vet -tags lua ./...
+      - go test -tags lua ./...
+
   run:
     desc: Run the demo application
     cmds:

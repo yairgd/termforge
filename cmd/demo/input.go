@@ -108,6 +108,8 @@ func (a *DemoApp) HandleInterrupt(ev *tcell.EventInterrupt) {
 	switch ev.Data().(type) {
 	case termforge.SubmitMsg:
 		a.ctx.Bus.Dispatch(ev.Data())
+	case luaEnded:
+		a.onLuaEnded()
 	}
 }
 

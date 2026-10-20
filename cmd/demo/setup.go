@@ -11,6 +11,7 @@ import (
 const (
 	tabPanes = iota
 	tabColumns
+	tabLua
 )
 
 func (a *DemoApp) Init() error {
@@ -26,6 +27,9 @@ func (a *DemoApp) Init() error {
 
 	a.tab = termforge.NewTabWidget("panes", a.buildPanesTab())
 	a.tab.AddTab("columns", a.buildColumnsTab())
+	if err := a.addLuaTab(); err != nil {
+		return err
+	}
 	a.tabBar = termforge.NewTabBarWidget(a.tab)
 
 	// Registration order is the geometry: the tab bar takes the top row and the

@@ -249,8 +249,15 @@ func (a *DemoApp) OnBuffer(args ...any) {
 	a.RequestFrame()
 }
 
-// Quit closes the focused pane and exits once the last one is gone (Vim :q).
+// Quit closes the focused pane and exits once the last one is gone (Vim :q);
+// ':q!' exits at once.
 func (a *DemoApp) Quit(args ...any) {
+	for _, arg := range args {
+		if s, ok := arg.(string); ok && s == "!" {
+			a.ForceQuit()
+			return
+		}
+	}
 	lay := a.Layout()
 	if lay == nil || lay.DeleteFocus() {
 		a.Exit()

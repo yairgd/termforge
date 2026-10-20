@@ -11,6 +11,14 @@ Release history for termforge. Each version is a Go module release, resolvable w
 
 ## Unreleased
 
+### Embedded Lua (`termforge/lua`)
+
+A C Lua 5.4 interpreter built into the module through cgo, with Lua's own REPL running on
+a PTY so a `CompositeTerminal` shows it like any other program, and a plugin API to call Go
+from Lua. See [Embedded Lua](LUA.md). The demo gains a third tab with a pixel matrix driven
+from the console (`mat.plot`, `mat.line`). It is opt-in: `go build -tags lua` (needs a C
+compiler and libedit); the default build stays pure Go.
+
 ### App chrome is a layout
 
 The App held a flat widget slice and handed the application a `HandleResize` hook to

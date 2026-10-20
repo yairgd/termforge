@@ -19,7 +19,8 @@ type DemoApp struct {
 	cmdWidget *termforge.CmdWidget
 	ctx       platform.AppContext
 
-	help *demo.HelpOverlay
+	help    *demo.HelpOverlay
+	luaPane luaPane
 	// builtins are the panes ':b' can name, in declaration order.
 	builtins     map[string]paneRef
 	builtinNames []string
@@ -61,6 +62,9 @@ func NewDemoApp() (*DemoApp, error) {
 
 // Close releases app resources.
 func (a *DemoApp) Close() {
+	if a.luaPane != nil {
+		a.luaPane.Close()
+	}
 	if a.App != nil {
 		a.App.Close()
 	}
