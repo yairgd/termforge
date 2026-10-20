@@ -24,7 +24,7 @@ func (a *DemoApp) repaint() { a.PostInterrupt(repaint{}) }
 //	+------------------+
 func (a *DemoApp) addLuaTab() error {
 	m := &demo.Matrix{}
-	matrix := demo.NewMatrixWidget("matrix", m)
+	matrix := demo.NewMatrixSheet(a.ctx, "matrix", m)
 	demo.RegisterMatrixLua(m, a.repaint)
 
 	pane, err := demo.NewLuaPane("lua", a.repaint)

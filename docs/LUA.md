@@ -108,8 +108,10 @@ function cannot call back into a Lua function.
 
 ## Demo
 
-With `-tags lua`, the demo (`cmd/demo`) has a third tab: a 64×32 pixel matrix, centered,
-over the Lua console. `internal/demo/matrix_lua.go` registers the `mat` library and a global
+With `-tags lua`, the demo (`cmd/demo`) has a third tab: a 64×32 pixel matrix over the Lua
+console. The matrix sits in a `termforge.Sheet`: centered when the pane is large, otherwise
+scrollable (wheel, `PgUp`/`PgDn`, `Home`/`End` vertically; horizontal wheel, Ctrl+wheel or
+`Left`/`Right` sideways). `internal/demo/matrix_lua.go` registers the `mat` library and a global
 `help`.
 
 | Call | Does |
