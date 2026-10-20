@@ -43,6 +43,7 @@ A runnable example application lives in [`cmd/demo`](https://github.com/yairgd/t
 | `github.com/yairgd/termforge/ptyx` | PTY plumbing: sessions, TTY allocation, output draining |
 | `github.com/yairgd/termforge/execcli` | Running a child process on a PTY behind a small client API |
 | `github.com/yairgd/termforge/devport` | Serial port helper for device-backed panes |
+| `github.com/yairgd/termforge/lua` | Optional (`-tags lua`): embedded C Lua with its REPL on a PTY and a Go plugin API — see [Embedded Lua](LUA.md) |
 
 `platform` is the dependency-free base: it must not import the engine root or any
 sibling package, and `scripts/check_imports.sh` enforces that.

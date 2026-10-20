@@ -95,6 +95,7 @@ github.com/yairgd/termforge            engine: App, Widget, WidgetTree, Canvas, 
                         /ptyx          PTY sessions, TTY allocation, output draining
                         /execcli       run a child process on a PTY
                         /devport       serial port helper
+                        /lua           optional (-tags lua): embedded C Lua, REPL on a PTY, Go plugin API
 cmd/demo                               runnable example application
 internal/demo                          its panes, layout and help window
 ```

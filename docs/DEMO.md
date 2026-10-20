@@ -8,7 +8,8 @@ description: The termforge demo application — a runnable host app that shows p
 one question: *what does an app have to write, and what does the framework already do?*
 Everything visible — split geometry, separator drag, wheel scrolling, text selection,
 command parsing, Tab completion, key sequences — comes from termforge. The demo supplies
-two tabs of panes, eleven commands, and a help window.
+two tabs of panes (a third, with an embedded Lua console, when built with `-tags lua`),
+eleven commands, and a help window.
 
 **Companion docs:** [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) · [WINDOW_MANAGEMENT.md](WINDOW_MANAGEMENT.md) · [INPUT.md](INPUT.md) · [COMMAND_SYSTEM.md](COMMAND_SYSTEM.md)
 
@@ -41,7 +42,9 @@ or type `:help` for the reference window, and `Ctrl-D` to leave.
 
 Two tabs, listed in a one-row bar across the top. `gt` / `gT`, `:tab next|prev`, or a
 click on a title switches between them; each tab owns a whole split tree, so switching
-swaps the geometry, the focused pane and the ratios in one move.
+swaps the geometry, the focused pane and the ratios in one move. Built with `-tags lua`
+(`task run:lua`), a third tab, `lua`, shows a pixel matrix over an embedded Lua console; see
+[Embedded Lua](LUA.md).
 
 ```text
  1 panes  2 columns             <- TabBarWidget, one chrome row
@@ -126,10 +129,11 @@ with four children, `:b` and `:help` are rest-arg leaves with completion callbac
 | `:equal` | Reset every split to an even ratio |
 | `:clear` | Clear the focused pane, when it implements `Clearable` |
 | `:help [command]` | Open the floating window, for one command or for everything |
-| `:quit` | Close the focused pane; exit once it was the last |
+| `:quit` | Close the focused pane; exit once it was the last. `:quit!` (`:q!`) exits at once |
 
-`:quit` follows Vim and peels off one pane at a time, while `Ctrl-D` exits immediately
-however many panes are open. Closing the last pane of a tab exits too: `TabWidget` has
+`:quit` follows Vim and peels off one pane at a time, while `:q!` and `Ctrl-D` exit immediately
+however many panes are open (`Ctrl-D` works in insert mode too, so it never reaches a Lua
+console as end-of-file). Closing the last pane of a tab exits too: `TabWidget` has
 no close operation yet, so the demo never has a tab to fall back to.
 
 `:b` is the one command that reaches across tabs. Each pane is registered under a name
@@ -148,7 +152,7 @@ with the tab that holds it, so naming a pane in the other tab switches to it fir
 | `i` / `Esc` | Insert mode / back to normal, and close the help window |
 | `Ctrl-W h/j/k/l`, `Ctrl-W <arrows>` | Move focus |
 | `j` / `k` | Scroll the focused pane |
-| `Ctrl-D` | Exit |
+| `Ctrl-D` | Exit, in normal and insert mode |
 
 | Pointer | Action |
 |---------|--------|
@@ -177,6 +181,7 @@ imports them.
 | `cmd/demo/main.go` | `main`, `-version`, construct and run |
 | `cmd/demo/app.go` | `DemoApp` struct — embeds `*termforge.App`, sets `App.Api = a` |
 | `cmd/demo/setup.go` | `Init`: builds the two tabs' panes and trees, chrome, mode handlers |
+| `cmd/demo/lua_tab.go` | The optional third tab (`-tags lua`): matrix over the Lua console; `lua_tab_off.go` is the no-op stub without the tag |
 | `cmd/demo/actions.go` | The command tree and every command handler |
 | `cmd/demo/keybindings.go` | Normal and insert key registries, mode transitions |
 | `cmd/demo/input.go` | Mouse routing, resize band math, per-mode key handlers |
@@ -184,6 +189,8 @@ imports them.
 | `internal/demo/scroll_pane.go` | `ScrollPane` — read-only text pane |
 | `internal/demo/layout.go` | `BuildDefault` / `BuildColumns` — one tree per tab, with their ratios |
 | `internal/demo/help_overlay.go` | `HelpOverlay` — floating, scrollable window |
+| `internal/demo/matrix.go`, `effects.go` | `Matrix` pixel grid, its half-block widget, and the fire/plasma effects |
+| `internal/demo/lua_pane.go`, `matrix_lua.go` | `-tags lua` only: the Lua console pane and the `mat.*` Go functions exposed to it |
 
 ---
 
