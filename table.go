@@ -117,6 +117,9 @@ func (t *Table) colWidths() []int {
 		if w <= 0 {
 			w = runeLen(col.Name)
 			for _, row := range t.rows {
+				if i >= len(row) {
+					continue
+				}
 				if n := runeLen(row[i].Text); n > w {
 					w = n
 				}
