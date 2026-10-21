@@ -7,6 +7,7 @@ package lua
 #cgo LDFLAGS: -lm
 #include <stdlib.h>
 #include "plugin.h"
+#include "lauxlib.h"
 */
 import "C"
 
@@ -173,4 +174,66 @@ func (c *Call) Print(s string) {
 	if C.lua_pcallk(c.l, 1, 0, 0, 0, nil) != 0 {
 		C.lua_settop(c.l, -2) // drop the error message
 	}
+}
+
+const (
+	kOther = iota
+	kString
+	kNumber
+	kBool
+)
+
+func (c *Call) kind(i int) int {
+	switch C.lua_type(c.l, C.int(i)) {
+	case C.LUA_TSTRING:
+		return kString
+	case C.LUA_TNUMBER:
+		return kNumber
+	case C.LUA_TBOOLEAN:
+		return kBool
+	}
+	return kOther
+}
+
+func (c *Call) truthy(i int) bool { return C.lua_toboolean(c.l, C.int(i)) != 0 }
+
+func (c *Call) newTable(narr, nrec int) { C.lua_createtable(c.l, C.int(narr), C.int(nrec)) }
+
+// setIndex pops the top value into t[n]; t is just below it.
+func (c *Call) setIndex(n int) { C.lua_seti(c.l, -2, C.lua_Integer(n)) }
+
+// setField pops the top value into t[k]; t is just below it.
+func (c *Call) setField(k string) {
+	ck := C.CString(k)
+	C.lua_setfield(c.l, -2, ck)
+	C.free(unsafe.Pointer(ck))
+}
+
+var tostrIdx = -1
+
+// tostr is the __tostring of pushed tables: it returns the text kept in the metatable.
+func tostr(c *Call) (int, error) {
+	k := C.CString("__text")
+	defer C.free(unsafe.Pointer(k))
+	if C.luaL_getmetafield(c.l, 1, k) == C.LUA_TNIL {
+		c.PushString("table")
+	}
+	return 1, nil
+}
+
+// setText gives the table on top of the stack a metatable whose __tostring prints text.
+func (c *Call) setText(text string) {
+	mu.Lock()
+	if tostrIdx < 0 {
+		tostrIdx = len(funcs)
+		funcs = append(funcs, tostr)
+	}
+	idx := tostrIdx
+	mu.Unlock()
+	c.newTable(0, 2)
+	c.PushString(text)
+	c.setField("__text")
+	C.tf_push_func(c.l, C.int(idx))
+	c.setField("__tostring")
+	C.lua_setmetatable(c.l, -2)
 }

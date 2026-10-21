@@ -108,6 +108,34 @@ function cannot call back into a Lua function.
 - A long-running chunk blocks the REPL until it ends or is interrupted.
 - Only the Lua thread may use the Lua state; other goroutines cannot call into it.
 
+## Services (Lua, REST and MCP from one definition)
+
+`termforge/service` is a registry of named functions: name, help, typed params and a handler.
+Define each function once, then expose the registry to every caller:
+
+```go
+reg := &service.Registry{}
+reg.Add(service.Service{
+    Name: "ps", Help: "list processes",
+    Run: func(ctx context.Context, a service.Args) (any, error) { return rows, nil },
+})
+lua.Register("app", lua.ServiceFuncs(reg)) // app.ps() in the console
+go http.Serve(ln, reg.Handler())           // REST and MCP, bind to loopback only
+```
+
+- **Lua:** arguments are matched to the params in order, and a variadic param takes the rest.
+  A returned map, struct or slice becomes a table; printed in the console it shows one readable
+  line per element, and scripts can still index it. `Call.Push(v)` does the same conversion for
+  any Go value that encodes to JSON.
+- **REST:** `GET /api` lists the services, `POST /api/<name>` takes JSON arguments and answers
+  `{"result": ...}` or `{"error": ...}`.
+- **MCP:** `POST /mcp` speaks JSON-RPC 2.0 (`initialize`, `ping`, `tools/list`, `tools/call`)
+  with plain JSON replies, so an AI agent can discover each function and read its help.
+- `reg.Help(topic)` gives the text for a `help()` function; `reg.ToolSchemas()` gives the
+  name, description and JSON schema of each service.
+
+Services can run commands, so serve them on a loopback address and only on request.
+
 ## Demo
 
 With `-tags lua`, the demo (`cmd/demo`) has a third tab: a 64×32 pixel matrix over the Lua
