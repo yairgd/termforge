@@ -11,6 +11,13 @@ Release history for termforge. Each version is a Go module release, resolvable w
 
 ## Unreleased
 
+### Detachable sessions (`termforge/detach`)
+
+A program can keep running when its terminal goes away and be attached again from another
+terminal, without tmux: `myapp --session NAME`, `Ctrl-]` to detach, `--attach NAME`,
+`--sessions`. The app opts in with one call, `detach.Handle("myapp")`, at the top of `main`;
+the demo does. See [Detachable sessions](DETACH.md).
+
 ### Embedded Lua (`termforge/lua`)
 
 A C Lua 5.4 interpreter built into the module through cgo, with Lua's own REPL running on
