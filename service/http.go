@@ -1,8 +1,10 @@
 package service
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -24,7 +26,12 @@ func (r *Registry) Handler() http.Handler {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 			return
 		}
-		res, err := r.Call(q.Context(), strings.TrimPrefix(q.URL.Path, "/api/"), a)
+		name := strings.TrimPrefix(q.URL.Path, "/api/")
+		if !r.remote(name) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "no such service: " + name})
+			return
+		}
+		res, err := r.Call(q.Context(), name, a)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 			return
@@ -77,7 +84,13 @@ func (r *Registry) mcp(w http.ResponseWriter, q *http.Request) {
 	case "tools/list":
 		reply["result"] = map[string]any{"tools": r.ToolSchemas()}
 	case "tools/call":
-		res, err := r.Call(q.Context(), req.Params.Name, req.Params.Arguments)
+		var res any
+		var err error
+		if r.remote(req.Params.Name) {
+			res, err = r.Call(q.Context(), req.Params.Name, req.Params.Arguments)
+		} else {
+			err = fmt.Errorf("no such service: %q", req.Params.Name)
+		}
 		text, isErr := "", false
 		if err != nil {
 			text, isErr = err.Error(), true
@@ -95,4 +108,43 @@ func (r *Registry) mcp(w http.ResponseWriter, q *http.Request) {
 		reply["error"] = map[string]any{"code": -32601, "message": fmt.Sprintf("method not found: %s", req.Method)}
 	}
 	writeJSON(w, http.StatusOK, reply)
+}
+
+// WithToken rejects requests without "Authorization: Bearer <token>". An empty token
+// rejects everything, so a forgotten token never leaves the endpoint open.
+func WithToken(h http.Handler, token string) http.Handler {
+	want := []byte("Bearer " + token)
+	return http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
+		got := []byte(q.Header.Get("Authorization"))
+		if token == "" || subtle.ConstantTimeCompare(got, want) != 1 {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
+			return
+		}
+		h.ServeHTTP(w, q)
+	})
+}
+
+// ListenLoopback starts serving h on addr, which must be a loopback address (services can
+// run commands). It returns once the listener is open.
+func ListenLoopback(addr string, h http.Handler) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return fmt.Errorf("%q is not a loopback address", host)
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	go http.Serve(ln, h)
+	return nil
+}
+
+// remote reports whether name is a registered service that is served over REST/MCP.
+func (r *Registry) remote(name string) bool {
+	s, ok := r.find(name)
+	return ok && s.Remote
 }
