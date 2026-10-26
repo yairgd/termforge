@@ -15,12 +15,13 @@ const defaultHostPrefix = "[lua] "
 // CompositeTerminal wraps one xterm buffer with one bidirectional PTY and
 // optional inject-only host lines (e.g. lua.print on the IO pane).
 type CompositeTerminal struct {
-	ctl        *TerminalController
-	tty        *ptyx.TTY
-	cancelPump func()
-	hostPrefix string
-	keys       *commands.KeyBindingRegistry
-	clipboard  ClipboardIO
+	ctl         *TerminalController
+	tty         *ptyx.TTY
+	cancelPump  func()
+	hostPrefix  string
+	keys        *commands.KeyBindingRegistry
+	clipboard   ClipboardIO
+	onInterrupt func()
 
 	// Screen origin during Paint (for mouse hit testing).
 	screenX int
@@ -71,6 +72,17 @@ func (c *CompositeTerminal) SetPromptPrefixes(p PromptPrefixes) {
 		return
 	}
 	c.ctl.SetPromptPrefixes(p)
+}
+
+// SetInterruptHandler makes Ctrl-C call fn instead of sending ^C to the program, for
+// hosts whose program has no foreground process to signal (an embedded interpreter, no
+// PTY line discipline). A selection still wins: Ctrl-C copies it first. nil restores the
+// default, the byte going to the program.
+func (c *CompositeTerminal) SetInterruptHandler(fn func()) {
+	if c == nil {
+		return
+	}
+	c.onInterrupt = fn
 }
 
 // AttachTTY wires PTY bytes in and keyboard out. nil detaches.
@@ -238,6 +250,10 @@ func (c *CompositeTerminal) HandleKey(ev *tcell.EventKey) bool {
 		// in this pane, and once live output scrolls it out of view it hijacks
 		// every later Ctrl-C with nothing on screen to explain why.
 		c.clearSelection()
+		return true
+	}
+	if c.onInterrupt != nil && ev.Key() == tcell.KeyCtrlC {
+		c.onInterrupt()
 		return true
 	}
 	if isPasteKey(ev) {

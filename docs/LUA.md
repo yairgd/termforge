@@ -62,7 +62,7 @@ program. Line editing and history come from the vendored linenoise (arrows, Home
 Ctrl-A/E/K/U/W, Up/Down history); Ctrl-C at the prompt drops the line. Every `Run` must use
 the same slave path, because the console files are opened once per process.
 
-Ctrl-C: a PTY has no foreground process to signal, so the host calls `lua.Interrupt()`. Lua
+Ctrl-C: a PTY has no foreground process to signal, so the host calls `lua.Interrupt()`, normally through `term.SetInterruptHandler(lua.Interrupt)` (Ctrl-C copies a selection first). Lua
 stops at its next instruction with `interrupted!` and the REPL carries on. A Go function
 that runs for a long time never reaches a Lua instruction, so it polls `lua.Interrupts()`
 (a counter that goes up on every `Interrupt`): read it on entry and return once it changed.
@@ -120,7 +120,7 @@ reg.Add(service.Service{
     Run: func(ctx context.Context, a service.Args) (any, error) { return rows, nil },
 })
 lua.Register("app", lua.ServiceFuncs(reg)) // app.ps() in the console
-go http.Serve(ln, reg.Handler())           // REST and MCP, bind to loopback only
+service.ListenLoopback(addr, service.WithToken(reg.Handler(), token)) // REST and MCP
 ```
 
 - **Lua:** arguments are matched to the params in order, and a variadic param takes the rest.
@@ -131,6 +131,11 @@ go http.Serve(ln, reg.Handler())           // REST and MCP, bind to loopback onl
   `{"result": ...}` or `{"error": ...}`.
 - **MCP:** `POST /mcp` speaks JSON-RPC 2.0 (`initialize`, `ping`, `tools/list`, `tools/call`)
   with plain JSON replies, so an AI agent can discover each function and read its help.
+- **Local by default:** a service is callable from Lua and in-process code only. Set `Remote: true`
+  on a `service.Service` to also offer it over REST and MCP; unmarked services are absent from
+  `GET /api` and `tools/list`, and `POST /api/<name>` and `tools/call` refuse them.
+- `service.WithToken(h, token)` wraps the handler in a bearer-token check (an empty token rejects
+  everything) and `service.ListenLoopback(addr, h)` serves it on a loopback address only.
 - `reg.Help(topic)` gives the text for a `help()` function; `reg.ToolSchemas()` gives the
   name, description and JSON schema of each service.
 

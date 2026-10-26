@@ -62,3 +62,24 @@ func TestCompositeTerminalPaintCursor(t *testing.T) {
 	c.Paint(cv, true)
 	c.Paint(cv, false)
 }
+
+func TestCompositeTerminalInterruptHandler(t *testing.T) {
+	c := NewCompositeTerminal(10, 5, 100)
+	var got []byte
+	c.ctl.SetInputHandler(func(b []byte) error {
+		got = append(got, b...)
+		return nil
+	})
+	n := 0
+	c.SetInterruptHandler(func() { n++ })
+
+	if !c.HandleKey(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone)) || n != 1 || len(got) != 0 {
+		t.Fatalf("ctrl-c: handler calls %d, sent %q", n, got)
+	}
+
+	c.SetInterruptHandler(nil)
+	c.HandleKey(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone))
+	if n != 1 || string(got) != "\x03" {
+		t.Fatalf("no handler: calls %d, sent %q", n, got)
+	}
+}

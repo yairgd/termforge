@@ -27,14 +27,28 @@ type Param struct {
 type Service struct {
 	Name, Help string
 	Params     []Param
-	Run        func(ctx context.Context, a Args) (any, error)
+	// Remote also serves it over REST and MCP (Handler, ToolSchemas). The zero value keeps a
+	// service local: callable from Lua and in-process code only.
+	Remote bool
+	Run    func(ctx context.Context, a Args) (any, error)
 }
 
 // Args maps param name to value (JSON types: string, float64, bool, []any).
 type Args map[string]any
 
 func (a Args) String(n string) string { s, _ := a[n].(string); return s }
-func (a Args) Bool(n string) bool     { b, _ := a[n].(bool); return b }
+
+// Int is a number param (JSON numbers arrive as float64) as an int; 0 if absent.
+func (a Args) Int(n string) int {
+	switch v := a[n].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	}
+	return 0
+}
+func (a Args) Bool(n string) bool { b, _ := a[n].(bool); return b }
 
 // Strings is a variadic param (or a JSON array) as []string.
 func (a Args) Strings(n string) []string {
@@ -163,9 +177,13 @@ type Tool struct {
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
+// ToolSchemas describes the Remote services only.
 func (r *Registry) ToolSchemas() []Tool {
 	var out []Tool
 	for _, s := range r.List() {
+		if !s.Remote {
+			continue
+		}
 		props := map[string]any{}
 		req := []string{}
 		for _, p := range s.Params {

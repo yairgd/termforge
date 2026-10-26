@@ -28,6 +28,9 @@ func NewLuaPane(name string, postFrame func()) (*LuaPane, error) {
 	}
 	t := termforge.NewCompositeTerminal(80, 24, luaScrollback)
 	t.AttachTTY(tty, termforge.WireTTYOpts{PostFrame: postFrame})
+	// The PTY has no foreground process to signal, so Ctrl-C stops the running chunk
+	// through Lua.
+	t.SetInterruptHandler(lua.Interrupt)
 	return &LuaPane{BaseWidget: termforge.BaseWidget{PaneName: name}, term: t, tty: tty}, nil
 }
 
@@ -47,12 +50,6 @@ func (p *LuaPane) HandleEvent(ev tcell.Event) {
 	case *tcell.EventClipboard:
 		p.term.PasteBytes(e.Data())
 	case *tcell.EventKey:
-		// The PTY has no foreground process to signal, so Ctrl-C stops the running
-		// chunk through Lua (unless it is copying a selection).
-		if e.Key() == tcell.KeyCtrlC && !p.term.HasSelection() {
-			lua.Interrupt()
-			return
-		}
 		p.term.HandleKey(e)
 	}
 }

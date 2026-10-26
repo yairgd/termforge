@@ -11,6 +11,17 @@ Release history for termforge. Each version is a Go module release, resolvable w
 
 ## Unreleased
 
+### Services: local by default, token, loopback listener
+
+- `service.Service.Remote` — only services marked `Remote` are served over REST and MCP; the rest stay callable from Lua and in-process code. **Behavior change:** a service is no longer served remotely unless it sets `Remote: true`.
+- `service.WithToken` (bearer check) and `service.ListenLoopback` (loopback-only listener); `service.Args.Int`.
+
+### Ctrl-C hook (`CompositeTerminal.SetInterruptHandler`)
+
+A host whose program cannot be signalled (an embedded interpreter, not a child process) can
+make Ctrl-C call a function instead of sending `^C`: `term.SetInterruptHandler(lua.Interrupt)`.
+A selection is still copied first. The Lua pane in the demo uses it.
+
 ### Detachable sessions (`termforge/detach`)
 
 A program can keep running when its terminal goes away and be attached again from another
