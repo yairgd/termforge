@@ -39,8 +39,8 @@ type Options struct {
 }
 
 // TTY holds a PTY master (when present), optional child process, and fan-out
-// readers. Create with Start (process), Open (new pair), or AttachPath (external
-// slave path only — metadata for -inferior-tty-set / --tty).
+// readers. Create with Start (process), Open (new pair), FromMaster (a master received
+// from elsewhere), or AttachPath (external slave path only — metadata for -inferior-tty-set / --tty).
 type TTY struct {
 	master    *os.File
 	slave     *os.File // kept open in Open mode so the pts node stays valid
@@ -97,6 +97,18 @@ func AttachPath(path string) *TTY {
 		slaveName: path,
 		subs:      make(map[*subscriber]struct{}),
 	}
+}
+
+// FromMaster wraps a PTY master this process did not open, for example one received over a
+// unix socket, and begins the reader goroutine. The program on the slave side is not a child
+// of this process, so Pid is 0 and Close only closes the file; it does not signal anything.
+func FromMaster(master *os.File) *TTY {
+	t := &TTY{
+		master: master,
+		subs:   make(map[*subscriber]struct{}),
+	}
+	t.startReader()
+	return t
 }
 
 // Start runs argv on a PTY and begins the reader goroutine.

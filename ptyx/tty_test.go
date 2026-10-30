@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/creack/pty"
+	"golang.org/x/term"
 )
 
 func TestOpenTTYSubscribeAndWrite(t *testing.T) {
@@ -177,5 +180,51 @@ func TestStartProcessSubscribe(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for echo output")
 		}
+	}
+}
+
+// A master opened elsewhere shows what is written to its slave and sends what is typed.
+func TestFromMaster(t *testing.T) {
+	master, slave, err := pty.Open()
+	if err != nil {
+		t.Skipf("pty unavailable: %v", err)
+	}
+	defer slave.Close()
+
+	tty := FromMaster(master)
+	defer tty.Close()
+	if tty.Pid() != 0 {
+		t.Fatalf("Pid = %d, want 0", tty.Pid())
+	}
+
+	ch, cancel := tty.Subscribe()
+	defer cancel()
+	if _, err := slave.Write([]byte("hello")); err != nil {
+		t.Fatalf("slave write: %v", err)
+	}
+	deadline := time.After(2 * time.Second)
+	for got := ""; !strings.Contains(got, "hello"); {
+		select {
+		case msg, ok := <-ch:
+			if !ok || msg.Err != nil {
+				t.Fatalf("subscribe ended early: %v", msg.Err)
+			}
+			got += msg.Data
+		case <-deadline:
+			t.Fatal("timeout waiting for the slave's output")
+		}
+	}
+
+	// Typed bytes reach the slave (raw mode: no echo, no line buffering).
+	if _, err := term.MakeRaw(int(slave.Fd())); err != nil {
+		t.Fatalf("raw slave: %v", err)
+	}
+	if err := tty.SendRaw("x"); err != nil {
+		t.Fatalf("SendRaw: %v", err)
+	}
+	buf := make([]byte, 1)
+	slave.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if n, err := slave.Read(buf); err != nil || n != 1 || buf[0] != 'x' {
+		t.Fatalf("slave read = %q, %v", buf[:n], err)
 	}
 }
